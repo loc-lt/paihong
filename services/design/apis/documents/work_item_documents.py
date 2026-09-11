@@ -1,0 +1,59 @@
+from drf_spectacular.utils import OpenApiResponse
+
+from core.serializers.part_serializers import PartSerializer
+from core.serializers.work_item_process_serializers import (
+    ProcessWorkItemResultSerializer,
+    ProcessWorkItemSerializer,
+)
+from core.serializers.work_item_serializers import (
+    UpdateWorkItemSerializer,
+    WorkItemDetailSerializer,
+    WorkItemSerializer,
+)
+
+get_work_items_document = {
+    "summary": "List work items.",
+    "responses": {200: WorkItemSerializer(many=True)},
+}
+
+create_work_item_document = {
+    "summary": "Process work item (upload + AI detection + parts).",
+    "description": (
+        "Create a work item, upload one or more source files, run AI part detection "
+        "(stub until AI service is connected), and initialize parts with "
+        "RECEIVE_FILES and PICK_UPPER marked as done. "
+        "Use multipart/form-data with fields: item_code (unique), name, status, "
+        "workflow_template_id, and files[] (multiple files, same field name). "
+        "Allowed source extensions: PDF, AI, DXF, DWG (max 50 MB each)."
+    ),
+    "request": ProcessWorkItemSerializer,
+    "responses": {201: ProcessWorkItemResultSerializer},
+}
+
+get_work_item_document = {
+    "summary": "Get work item detail.",
+    "description": "Returns work item with nested source_documents and parts.",
+    "responses": {200: WorkItemDetailSerializer},
+}
+
+update_work_item_document = {
+    "summary": "Update work item.",
+    "request": UpdateWorkItemSerializer,
+    "responses": {200: WorkItemSerializer},
+}
+
+delete_work_item_document = {
+    "summary": "Delete work item.",
+    "responses": {200: OpenApiResponse(description="Deleted")},
+}
+
+get_source_documents_document = {
+    "summary": "List source documents.",
+    "responses": {200: OpenApiResponse(description="Source documents list")},
+}
+
+get_work_item_parts_document = {
+    "summary": "List parts for a work item.",
+    "description": "Returns all parts without pagination.",
+    "responses": {200: PartSerializer(many=True)},
+}

@@ -1,0 +1,13 @@
+upstream design_service {
+  server <ip_address>:9002;
+}
+
+upstream revision_service {
+  server <ip_address>:9003;
+}
+
+upstream user_service {
+  server <ip_address>:9001;
+}
+
+# See nginx/default.conf for full routing rules.

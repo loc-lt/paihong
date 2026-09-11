@@ -1,0 +1,45 @@
+---
+description: Model field constraints — schema only, explicit null/blank/default
+globs: core/models.py,**/models.py
+alwaysApply: false
+---
+
+# Model = schema only
+
+No `error_messages`, no DRF/`ValidationError`, no API copy. Enums live in `core/constant.py` as `IntegerChoices`. Store enums as `IntegerField`, do **not** set `choices=` on the model.
+
+Always write `null` and `blank` explicitly.
+
+## Required vs optional (DB)
+
+| Meaning | `null` | `blank` | `default` |
+|---|---|---|---|
+| Required value | `False` | `False` | only if ORM/DB must always have a value |
+| Optional **string** (`CharField`) | `False` | `True` | `""` |
+| Optional **text** (`TextField`, may be absent) | `True` | `True` | omit |
+| Optional **int / enum / FK / datetime** | `True` | `True` | omit |
+| Enum with DB default (status, type) | `False` | `False` | `Enum.X.value` |
+
+`default` on the model is for DB/ORM. It does **not** mean the API may omit the key. API omit = serializer `required=False`.
+
+## Per type
+
+- **CharField required**: `max_length=…`, `null=False`, `blank=False`. Add `unique=True` if unique.
+- **CharField optional**: `max_length=…`, `null=False`, `blank=True`, `default=""`.
+- **EmailField**: `max_length=254`, `null=False`, `blank=False`, `unique=True` when identity.
+- **TextField required**: `null=False`, `blank=False`.
+- **TextField optional**: `null=True`, `blank=True`. Exception: comma-separated blob like `amenities` → treat as optional string (`null=False`, `blank=True`, `default=""`).
+- **Integer / PositiveInteger required**: `null=False`, `blank=False`, `validators=[MinValueValidator(n)]` when n>0 (capacity, count). `PositiveIntegerField` still allows `0` without the validator.
+- **Integer optional**: `null=True`, `blank=True`.
+- **IntegerChoices required** (always stored): `IntegerField(default=Enum.X.value, null=False, blank=False)`.
+- **IntegerChoices optional / set later** (cancel/decline/check-in): `IntegerField(null=True, blank=True)` — no default.
+- **Decimal**: `max_digits`, `decimal_places`, `null=False`, `blank=False`, `validators=[MinValueValidator(0)]` when non-negative, `default=0` only if zero is a real default.
+- **Boolean**: `null=False`, `default=True|False`.
+- **Date / Time / DateTime required**: `null=False`, `blank=False`. Optional: `null=True`, `blank=True`.
+- **UUID**: `default=uuid.uuid4`, `null=False`, `blank=False`, `unique=True` when token.
+- **FK/O2O required**: `null=False`, `blank=False`, explicit `on_delete`.
+- **FK optional**: `null=True`, `blank=True`, `on_delete=SET_NULL` (or documented alternative).
+- **JSONField list**: `null=False`, `blank=True`, `default=list`.
+- **ImageField optional**: `null=True`, `blank=True`, `default=None`, `FileExtensionValidator`.
+
+Do not put uniqueness / min-value / overlap / state-machine rules in the model beyond schema + DB validators above.

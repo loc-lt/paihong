@@ -1,0 +1,113 @@
+---
+description: Serializer field validation per DRF type — custom messages for every fireable key
+globs: core/serializers/**/*.py,**/serializers/**/*.py
+alwaysApply: false
+---
+
+# Serializer = all API validation and messages
+
+Views stay thin. Filters: bad query → empty list, never 400. `global_response_errors` returns **only the first message, no field name**. Every key that DRF can fire **must** have a field-named custom message (never `"Not a valid string."`).
+
+Declare write fields explicitly. Do not rely on `ModelSerializer` auto fields for messages.
+
+## Three flags (never mix up)
+
+- `required=False` → omitting the **key** is OK (POST). PATCH `partial=True` already skips missing keys.
+- `allow_blank=True` → `""` / whitespace is OK (**CharField / EmailField / ChoiceField only**).
+- `allow_null=True` → JSON `null` is OK.
+
+`required=False` does **not** allow `""` or `null`.
+
+API omit (`required=False`) is independent of model `default`. Only omit when the endpoint contract allows it (e.g. room `status`, internal `requester_type`). A model default still requires the key if the API says so (`category`).
+
+Coerce optional `null` → `""` in `validate_<field>` when the model stores `""`, not NULL.
+
+## ChoiceField (IntegerChoices)
+
+No `blank` key. `""` and out-of-range → `invalid_choice`. JSON `null` → `null` (before choices). Wrong type (`true`, `[]`) → `invalid_choice` via `str(data)`.
+
+**Required choice** (client must send: category, check-in, decline/cancel reason, public requester_type):
+
+```python
+required=True, allow_null=False
+error_messages = {
+    "required": "{Label} is required!",
+    "null": "{Label} is required!",
+    "invalid_choice": "Invalid {label}!",
+}
+```
+
+**Optional choice with model default** (omit OK: room status, internal requester_type):
+
+```python
+required=False, allow_null=False
+# DO NOT set "required"
+error_messages = {
+    "invalid_choice": "Invalid {label}!",
+    "null": "Invalid {label}!",
+}
+```
+
+**Optional nullable choice** (omit or null OK, value later): `required=False`, `allow_null=True`, only `invalid_choice`. Prefer not exposing these on general write; use action serializers as required choices.
+
+Never `allow_blank=True` on enum integers.
+
+## CharField
+
+Keys: `required`, `null`, `blank`, `invalid`, `max_length` (+ `min_length` if set).
+
+- Required: `allow_blank=False`, `trim_whitespace=True`; `null` message = same as `required`; `blank` = `"… cannot be empty!"`.
+- Optional string: `required=False`, `allow_blank=True`, `allow_null=True`, only `invalid` + `max_length`; coerce `None` → `""` if model is `default=""`.
+- Optional text stored NULL: same flags, no coerce (keep `None`).
+- `true` / `[]` / `{}` → `invalid`. Integers/floats coerce to string (DRF); do not depend on that.
+
+## EmailField (subclass of CharField)
+
+Same as CharField **plus** `invalid` = `"… must be a valid email address!"` (covers both wrong type and bad format). Set `max_length=254` and the `max_length` message when the model has it.
+
+## IntegerField
+
+Keys: `required`, `null`, `invalid`, `min_value`, `max_value`, `max_string_length`. No `blank`. `""` → `invalid`.
+
+- Every writable integer must be bounded to its DB column, so oversized Python integers fail before `.save()`.
+- PostgreSQL `IntegerField` / `PositiveIntegerField`: max `2_147_483_647`.
+- PostgreSQL `BigIntegerField` / `BigAutoField`: max `9_223_372_036_854_775_807`.
+- Required: `min_value` when >0; `max_value` from DB type; `null` message = `required`.
+- Optional: `required=False`, `allow_null=True`; still set DB `max_value`.
+- Customize `max_string_length` with the same field-named “too large” message.
+
+## DecimalField
+
+Same as integer plus `max_digits`, `max_decimal_places`, `max_whole_digits`. Always declare all three when `max_digits`/`decimal_places` are set. Customize `max_string_length`. Use `min_value=Decimal("0")` not `0`.
+
+## DateField / TimeField / DateTimeField
+
+Keys: `required`, `null`, `invalid`. Date also has `datetime` if a datetime is sent — add that message on DateField. Time/DateTime: `invalid` states the format (`YYYY-MM-DD`, `HH:MM`).
+
+## BooleanField
+
+Keys: `required`, `null`, `invalid`. No `blank`. `""` → `invalid` unless `allow_null=True`.
+
+## PrimaryKeyRelatedField
+
+`""` is coerced to `None`. Keys: `required`, `null`, `does_not_exist`, `incorrect_type`. No `invalid`.
+
+- Required FK: `null` message = `required`; `incorrect_type` = `"… must be an integer ID!"`.
+- Optional FK: `required=False`, `allow_null=True`; `does_not_exist` + `incorrect_type` only. Extra rules (room required unless Free Tour) go in `validate()`.
+- Bound numeric PKs before querying (`BigAutoField` max `9_223_372_036_854_775_807`). DRF 3.15's `pk_field.to_internal_value()` does not run `min_value`/`max_value` validators; use the project's bounded related-field implementation (or call an `IntegerField.run_validation()` in a subclass) rather than relying on `pk_field`.
+
+## ListField
+
+Parent: `not_a_list` (and `invalid` if you set it — unused by DRF; still set both to the same list message), `empty` if `allow_empty=False`, `required`, `null`. Declare `child=…` with the **child** keys (`invalid`, `blank`, `invalid_image`, …).
+
+## ImageField / FileField
+
+`required`, `null`, `invalid`, `invalid_image` (ImageField), `empty`, `no_name`. Size/MIME → `validate_<field>`, not `error_messages`.
+
+## JSONField / UUIDField
+
+`required`, `null`, `invalid`.
+
+## `validate()` / `validate_<field>`
+
+Use for uniqueness, overlap, capacity, state machine, conditional required (room vs Free Tour), OTHER → detail_reason. Do not repeat type checks already covered by `error_messages`.

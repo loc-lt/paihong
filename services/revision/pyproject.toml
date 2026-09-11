@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "shoe-revision-service"
+version = "0.1.0"
+description = "Shoe design workflow API service"
+authors = ["Paihong"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+django = ">=3.2,<5.1"
+django-debug-toolbar = "^4.4.6"
+django-extensions = "^3.2.3"
+djangorestframework = "^3.15.2"
+python-dotenv = "^1.0.1"
+djangorestframework-simplejwt = "^5.3.1"
+drf-spectacular = "^0.27.2"
+psycopg2 = "^2.9.10"
+django-cors-headers = "^4.5.0"
+django-soft-delete = "^1.0.15"
+pillow = "^11.0.0"
+django-filter = "^24.3"
+django-storages = "^1.14.4"
+uvicorn = "^0.34.0"
+django-simple-history = "^3.8.0"
+redis = "^5.2.0"
+django-redis = "^5.4.0"
+
+boto3 = "^1.35.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

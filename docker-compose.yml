@@ -1,0 +1,127 @@
+services:
+  user_service:
+    build:
+      context: ./services/user
+      dockerfile: Dockerfile
+    command: uvicorn app.asgi:application --host 0.0.0.0 --port 8000 --reload --log-level info
+    volumes:
+      - ./app:/usr/src/service/app
+      - ./core:/usr/src/service/core
+      - ./services/user/apis:/usr/src/service/apis
+      - ./services/user/.env:/usr/src/service/.env
+      - static_volume:/usr/src/service/static
+      - media_volume:/usr/src/service/media
+      - ./services/user/pyproject.toml:/usr/src/service/pyproject.toml
+      - ./services/user/poetry.lock:/usr/src/service/poetry.lock
+    ports:
+      - 9001:8000
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    networks:
+      - dbnetwork
+
+  design_service:
+    build:
+      context: ./services/design
+      dockerfile: Dockerfile
+    command: uvicorn app.asgi:application --host 0.0.0.0 --port 8000 --reload --log-level info
+    volumes:
+      - ./app:/usr/src/service/app
+      - ./core:/usr/src/service/core
+      - ./services/design/apis:/usr/src/service/apis
+      - ./services/design/.env:/usr/src/service/.env
+      - static_volume:/usr/src/service/static
+      - media_volume:/usr/src/service/media
+      - ./services/design/pyproject.toml:/usr/src/service/pyproject.toml
+      - ./services/design/poetry.lock:/usr/src/service/poetry.lock
+    ports:
+      - 9002:8000
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    networks:
+      - dbnetwork
+
+  revision_service:
+    build:
+      context: ./services/revision
+      dockerfile: Dockerfile
+    command: uvicorn app.asgi:application --host 0.0.0.0 --port 8000 --reload --log-level info
+    volumes:
+      - ./app:/usr/src/service/app
+      - ./core:/usr/src/service/core
+      - ./services/revision/apis:/usr/src/service/apis
+      - ./services/revision/.env:/usr/src/service/.env
+      - static_volume:/usr/src/service/static
+      - media_volume:/usr/src/service/media
+      - ./services/revision/pyproject.toml:/usr/src/service/pyproject.toml
+      - ./services/revision/poetry.lock:/usr/src/service/poetry.lock
+    ports:
+      - 9003:8000
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    networks:
+      - dbnetwork
+
+  nginx:
+    build: ./nginx
+    volumes:
+      - static_volume:/home/app/web/static
+      - media_volume:/home/app/web/media
+    ports:
+      - "${FORWARD_PORT:-82}:80"
+    depends_on:
+      - user_service
+      - design_service
+      - revision_service
+    networks:
+      - dbnetwork
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - 6379:6379
+    networks:
+      - dbnetwork
+
+  db:
+    image: postgres:16
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    ports:
+      - 5434:5432
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+      - TZ=Asia/Ho_Chi_Minh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - dbnetwork
+
+volumes:
+  postgres_data:
+  static_volume:
+  media_volume:
+
+networks:
+  dbnetwork:
+    driver: bridge
