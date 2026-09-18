@@ -2,7 +2,6 @@ import uuid
 
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
-from django.utils import timezone
 from django_extensions.db.models import TimeStampedModel
 from django_softdelete.models import SoftDeleteModel
 
@@ -20,13 +19,24 @@ from core.managers import DeletedUserManager, GlobalUserManager, SoftDeleteUserM
 
 
 class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel, SoftDeleteModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    username = models.CharField(max_length=150, unique=True)
-    first_name = models.CharField(max_length=150, blank=True)
-    last_name = models.CharField(max_length=150, blank=True)
-    role = models.IntegerField(default=UserRoleEnum.CUSTOMER.value, db_index=True)
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
+    username = models.CharField(max_length=150, unique=True, null=False, blank=False)
+    first_name = models.CharField(
+        max_length=150, null=False, blank=True, default=""
+    )
+    last_name = models.CharField(max_length=150, null=False, blank=True, default="")
+    role = models.IntegerField(
+        default=UserRoleEnum.CUSTOMER.value,
+        null=False,
+        blank=False,
+        db_index=True,
+    )
     status = models.IntegerField(
         default=UserStatusEnum.ACTIVE.value,
+        null=False,
+        blank=False,
         db_index=True,
     )
     avatar = models.ForeignKey(
@@ -36,8 +46,10 @@ class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel, SoftDeleteModel
         related_name="user_avatars",
         on_delete=models.SET_NULL,
     )
-    is_staff = models.BooleanField(default=False)
-    token_version = models.UUIDField(default=uuid.uuid4)
+    is_staff = models.BooleanField(null=False, default=False)
+    token_version = models.UUIDField(
+        default=uuid.uuid4, null=False, blank=False
+    )
 
     objects = SoftDeleteUserManager()
     global_objects = GlobalUserManager()
@@ -73,16 +85,22 @@ class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel, SoftDeleteModel
 
 
 class FileObject(TimeStampedModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
     storage_backend = models.IntegerField(
         default=StorageBackendEnum.LOCAL.value,
+        null=False,
+        blank=False,
     )
-    storage_key = models.CharField(max_length=1000, unique=True)
-    extension = models.CharField(max_length=30, blank=True)
-    mime_type = models.CharField(max_length=150, blank=True)
-    size_bytes = models.BigIntegerField()
-    sha256 = models.CharField(max_length=64, db_index=True)
-    metadata = models.JSONField(default=dict, blank=True)
+    storage_key = models.CharField(
+        max_length=1000, unique=True, null=False, blank=False
+    )
+    extension = models.CharField(max_length=30, null=False, blank=True, default="")
+    mime_type = models.CharField(max_length=150, null=False, blank=True, default="")
+    size_bytes = models.BigIntegerField(null=False, blank=False)
+    sha256 = models.CharField(max_length=64, null=False, blank=False, db_index=True)
+    metadata = models.JSONField(default=dict, null=False, blank=True)
     created_by = models.ForeignKey(
         User,
         null=True,
@@ -105,11 +123,15 @@ class FileObject(TimeStampedModel):
 
 
 class WorkItem(TimeStampedModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    item_code = models.CharField(max_length=255, unique=True)
-    name = models.CharField(max_length=255, blank=True)
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
+    item_code = models.CharField(max_length=255, unique=True, null=False, blank=False)
+    name = models.CharField(max_length=255, null=False, blank=True, default="")
     status = models.IntegerField(
         default=WorkItemStatusEnum.NEW.value,
+        null=False,
+        blank=False,
         db_index=True,
     )
     workflow_template = models.ForeignKey(
@@ -148,25 +170,42 @@ class WorkItem(TimeStampedModel):
 
 
 class SourceDocument(TimeStampedModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
     work_item = models.ForeignKey(
         WorkItem,
         related_name="source_documents",
         on_delete=models.CASCADE,
+        null=False,
+        blank=False,
     )
     file = models.ForeignKey(
         FileObject,
         related_name="source_documents",
         on_delete=models.PROTECT,
+        null=False,
+        blank=False,
     )
-    sequence = models.PositiveIntegerField()
-    original_filename = models.CharField(max_length=500)
-    document_type = models.CharField(max_length=50, blank=True)
+    svg_file = models.ForeignKey(
+        FileObject,
+        related_name="source_document_svgs",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    sequence = models.PositiveIntegerField(null=False, blank=False)
+    original_filename = models.CharField(max_length=500, null=False, blank=False)
+    document_type = models.CharField(
+        max_length=50, null=False, blank=True, default=""
+    )
     status = models.IntegerField(
         default=SourceDocumentStatusEnum.UPLOADED.value,
+        null=False,
+        blank=False,
         db_index=True,
     )
-    metadata = models.JSONField(default=dict, blank=True)
+    metadata = models.JSONField(default=dict, null=False, blank=True)
     uploaded_by = models.ForeignKey(
         User,
         null=True,
@@ -206,20 +245,26 @@ class SourceDocument(TimeStampedModel):
 
 
 class Part(TimeStampedModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
     source_document = models.ForeignKey(
         SourceDocument,
         related_name="parts",
         on_delete=models.CASCADE,
+        null=False,
+        blank=False,
     )
-    sequence = models.PositiveIntegerField()
-    name = models.CharField(max_length=255, blank=True)
+    sequence = models.PositiveIntegerField(null=False, blank=False)
+    name = models.CharField(max_length=255, null=False, blank=True, default="")
     status = models.IntegerField(
         default=PartStatusEnum.NEW.value,
+        null=False,
+        blank=False,
         db_index=True,
     )
     source_page = models.PositiveIntegerField(null=True, blank=True)
-    source_bbox = models.JSONField(default=dict, blank=True)
+    source_bbox = models.JSONField(default=dict, null=False, blank=True)
     preview_file = models.ForeignKey(
         FileObject,
         null=True,
@@ -227,7 +272,7 @@ class Part(TimeStampedModel):
         related_name="part_previews",
         on_delete=models.SET_NULL,
     )
-    detected_metadata = models.JSONField(default=dict, blank=True)
+    detected_metadata = models.JSONField(default=dict, null=False, blank=True)
     created_by = models.ForeignKey(
         User,
         null=True,
@@ -269,13 +314,15 @@ class Part(TimeStampedModel):
 
 class WorkflowStepDefinition(TimeStampedModel):
     id = models.SmallAutoField(primary_key=True)
-    code = models.CharField(max_length=100, unique=True)
-    sequence = models.PositiveSmallIntegerField(unique=True)
-    name = models.CharField(max_length=255)
-    description = models.TextField(blank=True)
-    version = models.PositiveIntegerField(default=1)
-    is_active = models.BooleanField(default=True)
-    settings_schema_key = models.CharField(max_length=100, blank=True)
+    code = models.CharField(max_length=100, unique=True, null=False, blank=False)
+    sequence = models.PositiveSmallIntegerField(unique=True, null=False, blank=False)
+    name = models.CharField(max_length=255, null=False, blank=False)
+    description = models.TextField(null=True, blank=True)
+    version = models.PositiveIntegerField(default=1, null=False, blank=False)
+    is_active = models.BooleanField(null=False, default=True)
+    settings_schema_key = models.CharField(
+        max_length=100, null=False, blank=True, default=""
+    )
 
     class Meta:
         db_table = "workflow_step_definition"
@@ -286,12 +333,14 @@ class WorkflowStepDefinition(TimeStampedModel):
 
 
 class WorkflowTemplate(TimeStampedModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    code = models.CharField(max_length=100, unique=True)
-    name = models.CharField(max_length=255)
-    description = models.TextField(blank=True)
-    is_active = models.BooleanField(default=True)
-    is_default = models.BooleanField(default=False)
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
+    code = models.CharField(max_length=100, unique=True, null=False, blank=False)
+    name = models.CharField(max_length=255, null=False, blank=False)
+    description = models.TextField(null=True, blank=True)
+    is_active = models.BooleanField(null=False, default=True)
+    is_default = models.BooleanField(null=False, default=False)
 
     class Meta:
         db_table = "workflow_template"
@@ -302,20 +351,28 @@ class WorkflowTemplate(TimeStampedModel):
 
 
 class TemplateStep(TimeStampedModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
     template = models.ForeignKey(
         WorkflowTemplate,
         related_name="template_steps",
         on_delete=models.CASCADE,
+        null=False,
+        blank=False,
     )
     step = models.ForeignKey(
         WorkflowStepDefinition,
         related_name="template_steps",
         on_delete=models.PROTECT,
+        null=False,
+        blank=False,
     )
-    sequence = models.PositiveSmallIntegerField()
-    is_required = models.BooleanField(default=True)
-    settings_schema_version = models.PositiveIntegerField(default=1)
+    sequence = models.PositiveSmallIntegerField(null=False, blank=False)
+    is_required = models.BooleanField(null=False, default=True)
+    settings_schema_version = models.PositiveIntegerField(
+        default=1, null=False, blank=False
+    )
 
     class Meta:
         db_table = "template_step"
@@ -336,19 +393,27 @@ class TemplateStep(TimeStampedModel):
 
 
 class PartStep(TimeStampedModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
     part = models.ForeignKey(
         Part,
         related_name="steps",
         on_delete=models.CASCADE,
+        null=False,
+        blank=False,
     )
     step = models.ForeignKey(
         WorkflowStepDefinition,
         related_name="part_steps",
         on_delete=models.PROTECT,
+        null=False,
+        blank=False,
     )
     status = models.IntegerField(
         default=StepStatusEnum.NOT_STARTED.value,
+        null=False,
+        blank=False,
         db_index=True,
     )
     started_at = models.DateTimeField(null=True, blank=True)
@@ -395,14 +460,23 @@ class PartStep(TimeStampedModel):
 
 
 class StepRevision(TimeStampedModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
     part_step = models.ForeignKey(
         PartStep,
         related_name="revisions",
         on_delete=models.CASCADE,
+        null=False,
+        blank=False,
     )
-    revision_no = models.PositiveIntegerField()
-    revision_type = models.IntegerField(db_index=True)
+    revision_no = models.PositiveIntegerField(null=False, blank=False)
+    revision_type = models.IntegerField(
+        default=RevisionTypeEnum.MANUAL.value,
+        null=False,
+        blank=False,
+        db_index=True,
+    )
     parent_revision = models.ForeignKey(
         "self",
         null=True,
@@ -410,10 +484,14 @@ class StepRevision(TimeStampedModel):
         related_name="child_revisions",
         on_delete=models.SET_NULL,
     )
-    settings = models.JSONField(default=dict, blank=True)
-    settings_schema_version = models.PositiveIntegerField(default=1)
-    app_version = models.CharField(max_length=50, blank=True)
-    settings_hash = models.CharField(max_length=64, blank=True, db_index=True)
+    settings = models.JSONField(default=dict, null=False, blank=True)
+    settings_schema_version = models.PositiveIntegerField(
+        default=1, null=False, blank=False
+    )
+    app_version = models.CharField(max_length=50, null=False, blank=True, default="")
+    settings_hash = models.CharField(
+        max_length=64, null=False, blank=True, default="", db_index=True
+    )
     created_by = models.ForeignKey(
         User,
         null=True,
@@ -421,7 +499,7 @@ class StepRevision(TimeStampedModel):
         related_name="created_step_revisions",
         on_delete=models.SET_NULL,
     )
-    note = models.TextField(blank=True)
+    note = models.TextField(null=True, blank=True)
 
     class Meta:
         db_table = "step_revision"
@@ -448,21 +526,27 @@ class StepRevision(TimeStampedModel):
 
 
 class RevisionArtifact(TimeStampedModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
     revision = models.ForeignKey(
         StepRevision,
         related_name="artifacts",
         on_delete=models.CASCADE,
+        null=False,
+        blank=False,
     )
     file = models.ForeignKey(
         FileObject,
         related_name="revision_artifacts",
         on_delete=models.PROTECT,
+        null=False,
+        blank=False,
     )
-    filename = models.CharField(max_length=500, blank=True)
-    role = models.CharField(max_length=100, db_index=True)
-    sequence = models.PositiveIntegerField(default=0)
-    metadata = models.JSONField(default=dict, blank=True)
+    filename = models.CharField(max_length=500, null=False, blank=True, default="")
+    role = models.CharField(max_length=100, null=False, blank=False, db_index=True)
+    sequence = models.PositiveIntegerField(default=0, null=False, blank=False)
+    metadata = models.JSONField(default=dict, null=False, blank=True)
 
     class Meta:
         db_table = "revision_artifact"
@@ -489,11 +573,12 @@ class Notification(TimeStampedModel):
         User,
         on_delete=models.SET_NULL,
         null=True,
+        blank=True,
         related_name="notifications",
     )
-    notify_type = models.IntegerField(default=1)
+    notify_type = models.IntegerField(default=1, null=False, blank=False)
     data = models.JSONField(null=True, blank=True)
-    is_read = models.BooleanField(default=False)
+    is_read = models.BooleanField(null=False, default=False)
 
     class Meta:
         db_table = "notifications"

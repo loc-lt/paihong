@@ -9,6 +9,7 @@ from core.constant import (
     MAX_IMAGE_SIZE,
 )
 from core.models import PartStep, RevisionArtifact, StepRevision
+from core.serializers.fields import coerce_optional_string
 from core.serializers.file_serializers import FileObjectSerializer
 from core.serializers.workflow_serializers import WorkflowStepDefinitionSerializer
 
@@ -26,6 +27,7 @@ class StepRevisionSummarySerializer(serializers.ModelSerializer):
             "note",
             "created",
         ]
+        read_only_fields = fields
 
 
 class RevisionArtifactSerializer(serializers.ModelSerializer):
@@ -42,6 +44,7 @@ class RevisionArtifactSerializer(serializers.ModelSerializer):
             "file",
             "created",
         ]
+        read_only_fields = fields
 
 
 class StepRevisionDetailSerializer(serializers.ModelSerializer):
@@ -64,6 +67,7 @@ class StepRevisionDetailSerializer(serializers.ModelSerializer):
             "artifacts",
             "created",
         ]
+        read_only_fields = fields
 
 
 class PartStepSerializer(serializers.ModelSerializer):
@@ -86,11 +90,18 @@ class PartStepSerializer(serializers.ModelSerializer):
             "created",
             "modified",
         ]
+        read_only_fields = fields
 
 
 class PartStepDetailSerializer(PartStepSerializer):
     latest_revision = StepRevisionDetailSerializer(read_only=True)
     official_revision = StepRevisionDetailSerializer(read_only=True)
+
+
+class PartStepsListSerializer(serializers.Serializer):
+    steps = PartStepSerializer(many=True, read_only=True)
+    total_steps = serializers.IntegerField(read_only=True)
+    completed_steps = serializers.IntegerField(read_only=True)
 
 
 def validate_revision_upload(uploaded_file) -> None:
@@ -107,32 +118,44 @@ def validate_revision_upload(uploaded_file) -> None:
 class SaveStepRevisionSerializer(serializers.Serializer):
     settings = serializers.JSONField(
         required=False,
-        default=dict,
+        allow_null=True,
         error_messages={
             "invalid": "Settings must be valid JSON!",
+            "null": "Settings must be valid JSON!",
         },
     )
     files = serializers.ListField(
         child=serializers.FileField(
             error_messages={
+                "required": "Each file must be a valid upload!",
+                "null": "Each file must be a valid upload!",
                 "invalid": "Each file must be a valid upload!",
                 "empty": "File cannot be empty!",
+                "no_name": "Each file must be a valid upload!",
             },
         ),
         required=False,
+        allow_empty=True,
         error_messages={
+            "required": "Files must be a list!",
+            "null": "Files must be a list!",
             "empty": "Files list cannot be empty when provided!",
+            "not_a_list": "Files must be a list!",
+            "invalid": "Files must be a list!",
         },
     )
     base_revision_id = serializers.UUIDField(
         required=False,
+        allow_null=True,
         error_messages={
             "invalid": "Invalid base revision ID format!",
+            "null": "Invalid base revision ID format!",
         },
     )
     note = serializers.CharField(
         required=False,
         allow_blank=True,
+        allow_null=True,
         trim_whitespace=True,
         error_messages={
             "invalid": "Note must be a string!",
@@ -141,6 +164,7 @@ class SaveStepRevisionSerializer(serializers.Serializer):
     app_version = serializers.CharField(
         required=False,
         allow_blank=True,
+        allow_null=True,
         max_length=50,
         trim_whitespace=True,
         error_messages={
@@ -150,6 +174,7 @@ class SaveStepRevisionSerializer(serializers.Serializer):
     )
     settings_schema_version = serializers.IntegerField(
         required=False,
+        allow_null=True,
         min_value=1,
         max_value=INTEGER_FIELD_MAX_VALUE,
         default=1,
@@ -187,6 +212,14 @@ class SaveStepRevisionSerializer(serializers.Serializer):
             return request_files
         return list(attrs.get("files") or [])
 
+    def validate_app_version(self, value):
+        return coerce_optional_string(value)
+
+    def validate_settings_schema_version(self, value):
+        if value is None:
+            return 1
+        return value
+
     def validate(self, attrs):
         files = self._collect_uploaded_files(attrs)
         for uploaded in files:
@@ -218,10 +251,11 @@ class SaveStepRevisionSerializer(serializers.Serializer):
             user=self.context["request"].user,
             base_revision_id=self.validated_data.get("base_revision_id"),
             app_version=self.validated_data.get("app_version", ""),
-            note=self.validated_data.get("note", ""),
+            note=self.validated_data.get("note") or "",
             settings_schema_version=self.validated_data.get(
                 "settings_schema_version", 1
-            ),
+            )
+            or 1,
             mark_step_done=mark_step_done,
         )
 
@@ -232,8 +266,10 @@ CreateRevisionSerializer = SaveStepRevisionSerializer
 class RestoreRevisionSerializer(serializers.Serializer):
     base_revision_id = serializers.UUIDField(
         required=False,
+        allow_null=True,
         error_messages={
             "invalid": "Invalid base revision ID format!",
+            "null": "Invalid base revision ID format!",
         },
     )
 

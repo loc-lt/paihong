@@ -10,7 +10,7 @@ from .views import (
     WorkflowTemplateViewSet,
 )
 
-router = DefaultRouter()
+router = DefaultRouter(trailing_slash=False)
 router.register(r"v1/work_items", WorkItemViewSet, basename="work-item")
 router.register(r"v1/source_documents", SourceDocumentViewSet, basename="source-document")
 router.register(r"v1/parts", PartViewSet, basename="part")

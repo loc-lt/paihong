@@ -16,19 +16,28 @@ from core.services.source_document_converter import FileToSvgConverter
 
 def detect_parts_from_source_document(source_document, user=None) -> list[dict]:
     """
-    Convert a source document (PDF/AI/DXF) into one Part per SVG page/component.
+    Convert a source document (PDF/AI/DXF) into one Part per SVG region.
     """
     file_object = source_document.file
     file_bytes = read_file_object_bytes(file_object)
     filename = source_document.original_filename
 
     try:
-        list_svg, _svg_full = FileToSvgConverter.process_file(file_bytes, filename)
+        list_svg, svg_full = FileToSvgConverter.process_file(file_bytes, filename)
     except ValueError as exc:
         raise ValidationError({"file": str(exc)}) from exc
 
+    if svg_full:
+        source_document.svg_file = store_bytes_content(
+            svg_full.encode("utf-8"),
+            filename=f"{os.path.splitext(filename)[0] or 'document'}.svg",
+            created_by=user,
+        )
+
     if not list_svg:
-        raise ValidationError({"file": "No parts could be extracted from the source file!"})
+        raise ValidationError(
+            {"file": "No parts could be extracted from the source file!"}
+        )
 
     base_name = os.path.splitext(filename)[0] or "Part"
     extension = os.path.splitext(filename)[1].lower()
@@ -113,7 +122,10 @@ def process_source_document_with_ai(
 
     source_document.status = SourceDocumentStatusEnum.PROCESSED.value
     source_document.updated_by = user
-    source_document.save(update_fields=["status", "updated_by", "modified"])
+    update_fields = ["status", "updated_by", "modified"]
+    if source_document.svg_file_id:
+        update_fields.append("svg_file")
+    source_document.save(update_fields=update_fields)
     return create_parts_from_detection(
         source_document=source_document,
         parts_data=parts_data,

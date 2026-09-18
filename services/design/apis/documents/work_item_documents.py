@@ -1,6 +1,6 @@
 from drf_spectacular.utils import OpenApiResponse
 
-from core.serializers.part_serializers import PartSerializer
+from core.serializers.part_serializers import WorkItemPartsListSerializer
 from core.serializers.work_item_process_serializers import (
     ProcessWorkItemResultSerializer,
     ProcessWorkItemSerializer,
@@ -13,6 +13,10 @@ from core.serializers.work_item_serializers import (
 
 get_work_items_document = {
     "summary": "List work items.",
+    "description": (
+        "Each work item includes parts_count and completed_parts "
+        "(a part is completed when every step is done)."
+    ),
     "responses": {200: WorkItemSerializer(many=True)},
 }
 
@@ -32,7 +36,10 @@ create_work_item_document = {
 
 get_work_item_document = {
     "summary": "Get work item detail.",
-    "description": "Returns work item with nested source_documents and parts.",
+    "description": (
+        "Returns work item with nested source_documents and parts. "
+        "Each part includes total_steps and completed_steps (status = done)."
+    ),
     "responses": {200: WorkItemDetailSerializer},
 }
 
@@ -54,6 +61,9 @@ get_source_documents_document = {
 
 get_work_item_parts_document = {
     "summary": "List parts for a work item.",
-    "description": "Returns all parts without pagination.",
-    "responses": {200: PartSerializer(many=True)},
+    "description": (
+        "Returns all parts without pagination, plus total_parts and "
+        "completed_parts (a part is completed when every step is done)."
+    ),
+    "responses": {200: WorkItemPartsListSerializer},
 }

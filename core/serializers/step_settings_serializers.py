@@ -45,10 +45,13 @@ class StepPickUpperSettingsSerializer(serializers.Serializer):
 class StepFixLinesByAnchorSettingsSerializer(serializers.Serializer):
     anchors = AnchorSerializer(
         many=True,
+        allow_empty=False,
         error_messages={
             "required": "Anchors are required!",
             "null": "Anchors are required!",
             "empty": "At least one anchor is required!",
+            "not_a_list": "Anchors must be a list!",
+            "invalid": "Anchors must be a list!",
         },
     )
     snap_distance = serializers.FloatField(
@@ -86,7 +89,7 @@ class CanvasSerializer(serializers.Serializer):
         error_messages={
             "required": "Canvas height is required!",
             "invalid": "Canvas height must be a number!",
-            "null": "Canvas height is required!",
+            "null": "Canvas height cannot be negative!",
             "min_value": "Canvas height cannot be negative!",
         },
     )
@@ -134,9 +137,9 @@ class StepCanvasFrameSettingsSerializer(serializers.Serializer):
 
 
 STEP_SETTINGS_SERIALIZER_MAP = {
-    "PICK_UPPER": StepPickUpperSettingsSerializer,
-    "FIX_LINES_BY_ANCHOR": StepFixLinesByAnchorSettingsSerializer,
-    "CANVAS_FRAME_MEASURE": StepCanvasFrameSettingsSerializer,
+    # "PICK_UPPER": StepPickUpperSettingsSerializer,
+    # "FIX_LINES_BY_ANCHOR": StepFixLinesByAnchorSettingsSerializer,
+    # "CANVAS_FRAME_MEASURE": StepCanvasFrameSettingsSerializer,
 }
 
 

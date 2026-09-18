@@ -6,6 +6,7 @@ from core.serializers.file_serializers import FileObjectSerializer
 
 class SourceDocumentSerializer(serializers.ModelSerializer):
     file = FileObjectSerializer(read_only=True)
+    svg_file = FileObjectSerializer(read_only=True, allow_null=True)
 
     class Meta:
         model = SourceDocument
@@ -13,6 +14,7 @@ class SourceDocumentSerializer(serializers.ModelSerializer):
             "id",
             "work_item",
             "file",
+            "svg_file",
             "sequence",
             "original_filename",
             "document_type",

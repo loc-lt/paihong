@@ -1,6 +1,12 @@
 from rest_framework import serializers
 
 
+def coerce_optional_string(value):
+    if value is None:
+        return ""
+    return value
+
+
 class BoundedPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
     def __init__(
         self,
@@ -18,6 +24,8 @@ class BoundedPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
         super().__init__(**kwargs)
 
     def to_internal_value(self, data):
+        if data in (None, ""):
+            return super().to_internal_value(data)
         validated_pk = self.pk_validator.run_validation(data)
         return super().to_internal_value(validated_pk)
 
@@ -38,5 +46,7 @@ class BoundedUUIDRelatedField(serializers.PrimaryKeyRelatedField):
         super().__init__(**kwargs)
 
     def to_internal_value(self, data):
+        if data in (None, ""):
+            return super().to_internal_value(data)
         validated_uuid = self.uuid_field.run_validation(data)
         return super().to_internal_value(validated_uuid)

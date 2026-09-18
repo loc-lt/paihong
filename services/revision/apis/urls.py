@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import PartWorkflowViewSet, RevisionViewSet
 
-router = DefaultRouter()
+router = DefaultRouter(trailing_slash=False)
 router.register(r"v1/parts", PartWorkflowViewSet, basename="part-workflow")
 router.register(r"v1/revisions", RevisionViewSet, basename="revision")
 

@@ -24,19 +24,17 @@ def clear_steps_after(*, part: Part, after_sequence: int, user=None) -> dict:
 
     for part_step in part_steps_to_clear:
         revision_ids = list(part_step.revisions.values_list("id", flat=True))
-        if not revision_ids:
-            continue
+        if revision_ids:
+            deleted_revisions += len(revision_ids)
 
-        deleted_revisions += len(revision_ids)
+            PartStep.objects.filter(
+                latest_revision_id__in=revision_ids,
+            ).update(latest_revision=None)
+            PartStep.objects.filter(
+                official_revision_id__in=revision_ids,
+            ).update(official_revision=None)
 
-        PartStep.objects.filter(
-            latest_revision_id__in=revision_ids,
-        ).update(latest_revision=None)
-        PartStep.objects.filter(
-            official_revision_id__in=revision_ids,
-        ).update(official_revision=None)
-
-        StepRevision.objects.filter(id__in=revision_ids).delete()
+            StepRevision.objects.filter(id__in=revision_ids).delete()
 
         part_step.status = StepStatusEnum.NOT_STARTED.value
         part_step.started_at = None

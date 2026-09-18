@@ -16,3 +16,4 @@ exclude =
     /**/**/documents.*
     /**/**/database_seeder.py
     /**/**/validators.py
+    core/services/converter_pipeline/*

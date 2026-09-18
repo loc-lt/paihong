@@ -13,6 +13,7 @@ from core.constant import (
     UserStatusEnum,
 )
 from core.models import User
+from core.serializers.fields import coerce_optional_string
 from core.serializers.file_serializers import FileObjectSerializer
 from core.services.user import assign_user_avatar
 
@@ -35,7 +36,7 @@ class UserSerializer(serializers.ModelSerializer):
             "created",
             "modified",
         ]
-        read_only_fields = ["id", "full_name", "avatar", "created", "modified"]
+        read_only_fields = fields
 
 
 class UserSerializerWithToken(UserSerializer):
@@ -44,6 +45,7 @@ class UserSerializerWithToken(UserSerializer):
 
     class Meta(UserSerializer.Meta):
         fields = UserSerializer.Meta.fields + ["access_token", "refresh_token"]
+        read_only_fields = fields
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -56,9 +58,11 @@ class CreateUserSerializer(serializers.ModelSerializer):
     avatar = serializers.FileField(
         required=False,
         error_messages={
+            "required": "Avatar must be a valid upload!",
             "invalid": "Avatar must be a valid upload!",
             "null": "Avatar must be a valid upload!",
             "empty": "Avatar cannot be empty!",
+            "no_name": "Avatar must be a valid upload!",
         },
     )
     username = serializers.CharField(
@@ -76,6 +80,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True,
         required=True,
+        allow_blank=False,
         error_messages={
             "required": "Password is required!",
             "blank": "Password cannot be empty!",
@@ -86,6 +91,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
     first_name = serializers.CharField(
         required=False,
         allow_blank=True,
+        allow_null=True,
         max_length=150,
         trim_whitespace=True,
         error_messages={
@@ -96,6 +102,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
     last_name = serializers.CharField(
         required=False,
         allow_blank=True,
+        allow_null=True,
         max_length=150,
         trim_whitespace=True,
         error_messages={
@@ -134,6 +141,18 @@ class CreateUserSerializer(serializers.ModelSerializer):
             "avatar",
         ]
 
+    def validate_username(self, value):
+        username = value.strip()
+        if User.global_objects.filter(username=username).exists():
+            raise serializers.ValidationError("Username already exists!")
+        return username
+
+    def validate_first_name(self, value):
+        return coerce_optional_string(value)
+
+    def validate_last_name(self, value):
+        return coerce_optional_string(value)
+
     def validate_avatar(self, value):
         if value.size > AVATAR_MAX_SIZE:
             raise serializers.ValidationError("Avatar must be smaller than 3 MB!")
@@ -168,14 +187,17 @@ class UpdateUserSerializer(serializers.ModelSerializer):
     avatar = serializers.FileField(
         required=False,
         error_messages={
+            "required": "Avatar must be a valid upload!",
             "invalid": "Avatar must be a valid upload!",
             "null": "Avatar must be a valid upload!",
             "empty": "Avatar cannot be empty!",
+            "no_name": "Avatar must be a valid upload!",
         },
     )
     first_name = serializers.CharField(
         required=False,
         allow_blank=True,
+        allow_null=True,
         max_length=150,
         trim_whitespace=True,
         error_messages={
@@ -186,6 +208,7 @@ class UpdateUserSerializer(serializers.ModelSerializer):
     last_name = serializers.CharField(
         required=False,
         allow_blank=True,
+        allow_null=True,
         max_length=150,
         trim_whitespace=True,
         error_messages={
@@ -212,7 +235,10 @@ class UpdateUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True,
         required=False,
+        allow_blank=False,
+        allow_null=True,
         error_messages={
+            "blank": "Password cannot be empty!",
             "invalid": "Password must be a string!",
         },
     )
@@ -231,6 +257,12 @@ class UpdateUserSerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
         kwargs["partial"] = True
         super().__init__(*args, **kwargs)
+
+    def validate_first_name(self, value):
+        return coerce_optional_string(value)
+
+    def validate_last_name(self, value):
+        return coerce_optional_string(value)
 
     def validate_avatar(self, value):
         if value.size > AVATAR_MAX_SIZE:
@@ -281,12 +313,14 @@ class UserLoginSerializer(serializers.Serializer):
     username = serializers.CharField(
         required=True,
         allow_blank=False,
+        max_length=150,
         trim_whitespace=True,
         error_messages={
             "required": "Please enter your username!",
             "blank": "Username cannot be empty!",
             "null": "Please enter your username!",
             "invalid": "Username must be a string!",
+            "max_length": "Username cannot exceed 150 characters!",
         },
     )
     password = serializers.CharField(
@@ -300,6 +334,43 @@ class UserLoginSerializer(serializers.Serializer):
             "invalid": "Password must be a string!",
         },
     )
+
+
+class LogoutSerializer(serializers.Serializer):
+    refresh_token = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        trim_whitespace=True,
+        error_messages={
+            "required": "Refresh token is required!",
+            "blank": "Refresh token cannot be empty!",
+            "null": "Refresh token is required!",
+            "invalid": "Refresh token must be a string!",
+        },
+    )
+
+    def validate_refresh_token(self, value):
+        try:
+            token = RefreshToken(value)
+        except (TokenError, InvalidToken) as exc:
+            if "blacklisted" in str(exc).lower():
+                return None
+            raise serializers.ValidationError("Refresh token is invalid!")
+        return token
+
+    def validate(self, attrs):
+        token = attrs.get("refresh_token")
+        if token is None:
+            attrs["token"] = None
+            attrs["user"] = None
+            return attrs
+        user_id = token.get(api_settings.USER_ID_CLAIM)
+        user = User.objects.filter(
+            **{api_settings.USER_ID_FIELD: user_id}
+        ).first()
+        attrs["token"] = token
+        attrs["user"] = user
+        return attrs
 
 
 class RefreshTokenSerializer(serializers.Serializer):

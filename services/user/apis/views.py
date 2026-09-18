@@ -2,11 +2,10 @@ from drf_spectacular.utils import extend_schema
 from django.contrib.auth import authenticate
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from core.jwt import MyTokenObtainPairSerializer
@@ -14,6 +13,7 @@ from core.paginators import CustomPaginator
 from core.permissions import can_manage_users
 from core.serializers.user_serializers import (
     CreateUserSerializer,
+    LogoutSerializer,
     RefreshTokenSerializer,
     RegisterUserSerializer,
     UpdateUserSerializer,
@@ -30,6 +30,7 @@ from .documents import (
     get_user_document,
     get_users_document,
     login_user_document,
+    logout_user_document,
     refresh_token_document,
     register_user_document,
     restore_user_document,
@@ -84,22 +85,26 @@ class AuthenViewSet(viewsets.ViewSet):
             )
         return global_response_errors(serializer.errors)
 
+    @extend_schema(**logout_user_document)
     @action(methods=["post"], detail=False, url_path="logout")
     def logout_user(self, request):
-        try:
-            refresh_token = RefreshToken(request.data.get("refresh_token"))
-            if not refresh_token:
-                raise AuthenticationFailed("No refresh token provided.")
-            request.user.set_new_token_version()
-            refresh_token.blacklist()
-            return Response(
-                {"status": True, "message": "Logout successfully!"},
-                status=status.HTTP_200_OK,
-            )
-        except TokenError as exc:
-            raise AuthenticationFailed(f"{str(exc)}!")
-        except InvalidToken as exc:
-            raise AuthenticationFailed(f"{str(exc)}!")
+        serializer = LogoutSerializer(data=request.data)
+        if not serializer.is_valid():
+            return global_response_errors(serializer.errors)
+
+        user = serializer.validated_data.get("user")
+        refresh_token = serializer.validated_data.get("token")
+        if user:
+            user.set_new_token_version()
+        if refresh_token:
+            try:
+                refresh_token.blacklist()
+            except TokenError:
+                pass
+        return Response(
+            {"status": True, "message": "Logout successfully!"},
+            status=status.HTTP_200_OK,
+        )
 
     @action(methods=["get"], detail=False, url_path="me")
     def me(self, request):

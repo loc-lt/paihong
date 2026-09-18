@@ -1,8 +1,7 @@
 from rest_framework import serializers
 
 from core.models import Notification
-
-from .user_serializers import UserSerializer
+from core.serializers.user_serializers import UserSerializer
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -10,5 +9,13 @@ class NotificationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Notification
-        fields = "__all__"
-        ordering = ["id"]
+        fields = [
+            "id",
+            "user",
+            "notify_type",
+            "data",
+            "is_read",
+            "created",
+            "modified",
+        ]
+        read_only_fields = fields

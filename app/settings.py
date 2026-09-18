@@ -173,3 +173,5 @@ CACHES = {
 SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 SESSION_CACHE_ALIAS = "default"
 SIMPLE_HISTORY_HISTORY_CHANGE_REASON_USE_TEXT_FIELD = True
+
+APPEND_SLASH = False

@@ -4,13 +4,13 @@ import json
 from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
-from rest_framework.exceptions import ValidationError
 
 from core.constant import (
     AUTOSAVE_KEEP_LATEST,
     RevisionTypeEnum,
     StepStatusEnum,
 )
+from core.exceptions import RevisionConflict
 from core.models import PartStep, RevisionArtifact, StepRevision
 from core.services.file_storage import store_uploaded_file
 from core.serializers.step_settings_serializers import validate_step_settings
@@ -41,7 +41,7 @@ def _validate_base_revision(part_step: PartStep, base_revision_id):
         return
     latest = part_step.latest_revision_id
     if str(latest) != str(base_revision_id):
-        raise ValidationError(
+        raise RevisionConflict(
             {"base_revision_id": "Revision conflict. Please reload and try again!"}
         )
 
@@ -67,10 +67,7 @@ def create_step_revision(
     validated_settings = validate_step_settings(step_code, settings or {}, schema_key)
     settings_digest = _settings_hash(validated_settings)
 
-    if (
-        revision_type != RevisionTypeEnum.RESTORE.value
-        and not mark_step_done
-    ):
+    if not mark_step_done:
         _validate_base_revision(part_step, base_revision_id)
 
     if (
@@ -102,10 +99,14 @@ def create_step_revision(
         if not file_object:
             continue
 
+        filename = artifact.get("filename") or ""
+        if not filename and uploaded:
+            filename = uploaded.name or ""
+
         RevisionArtifact.objects.create(
             revision=revision,
             file=file_object,
-            filename=artifact.get("filename") or uploaded.name if uploaded else "",
+            filename=filename,
             role=artifact["role"],
             sequence=artifact.get("sequence", index),
             metadata=artifact.get("metadata") or {},

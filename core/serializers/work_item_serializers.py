@@ -2,8 +2,8 @@ from rest_framework import serializers
 
 from core.constant import WorkItemStatusEnum
 from core.models import WorkItem, WorkflowTemplate
-from core.serializers.fields import BoundedUUIDRelatedField
-from core.serializers.part_serializers import PartSerializer
+from core.serializers.fields import BoundedUUIDRelatedField, coerce_optional_string
+from core.serializers.part_serializers import PartWithStepsProgressSerializer
 from core.serializers.source_document_serializers import SourceDocumentSerializer
 from core.services.part_workflow import get_default_workflow_template
 
@@ -15,6 +15,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     parts_count = serializers.IntegerField(read_only=True)
+    completed_parts = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = WorkItem
@@ -25,20 +26,13 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "status",
             "workflow_template_id",
             "parts_count",
+            "completed_parts",
             "created_by",
             "updated_by",
             "created",
             "modified",
         ]
-        read_only_fields = [
-            "id",
-            "workflow_template_id",
-            "parts_count",
-            "created_by",
-            "updated_by",
-            "created",
-            "modified",
-        ]
+        read_only_fields = fields
 
 
 class WorkItemDetailSerializer(WorkItemSerializer):
@@ -46,19 +40,25 @@ class WorkItemDetailSerializer(WorkItemSerializer):
     parts = serializers.SerializerMethodField()
 
     class Meta(WorkItemSerializer.Meta):
-        fields = WorkItemSerializer.Meta.fields + ["source_documents", "parts"]
+        fields = [
+            field
+            for field in WorkItemSerializer.Meta.fields
+            if field not in {"parts_count", "completed_parts"}
+        ] + ["source_documents", "parts"]
+        read_only_fields = fields
 
     def get_parts(self, obj):
         parts = []
         for source_document in obj.source_documents.all():
             parts.extend(source_document.parts.all())
-        return PartSerializer(parts, many=True).data
+        return PartWithStepsProgressSerializer(parts, many=True).data
 
 
 class UpdateWorkItemSerializer(serializers.ModelSerializer):
     name = serializers.CharField(
         required=False,
         allow_blank=True,
+        allow_null=True,
         max_length=255,
         trim_whitespace=True,
         error_messages={
@@ -95,6 +95,9 @@ class UpdateWorkItemSerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
         kwargs["partial"] = True
         super().__init__(*args, **kwargs)
+
+    def validate_name(self, value):
+        return coerce_optional_string(value)
 
     def update(self, instance, validated_data):
         user = self.context["request"].user

@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from core.constant import WorkItemStatusEnum
 from core.models import WorkItem, WorkflowTemplate
-from core.serializers.fields import BoundedUUIDRelatedField
+from core.serializers.fields import BoundedUUIDRelatedField, coerce_optional_string
 from core.serializers.part_serializers import PartSerializer
 from core.serializers.source_document_serializers import SourceDocumentSerializer
 from core.serializers.work_item_serializers import WorkItemSerializer
@@ -27,6 +27,7 @@ class ProcessWorkItemSerializer(serializers.Serializer):
     name = serializers.CharField(
         required=False,
         allow_blank=True,
+        allow_null=True,
         max_length=255,
         trim_whitespace=True,
         error_messages={
@@ -58,14 +59,21 @@ class ProcessWorkItemSerializer(serializers.Serializer):
     files = serializers.ListField(
         child=serializers.FileField(
             error_messages={
+                "required": "Each source file must be a valid upload!",
+                "null": "Each source file must be a valid upload!",
                 "invalid": "Each source file must be a valid upload!",
                 "empty": "Source file cannot be empty!",
+                "no_name": "Each source file must be a valid upload!",
             },
         ),
         required=False,
         allow_empty=False,
         error_messages={
+            "required": "At least one source file is required!",
+            "null": "At least one source file is required!",
             "empty": "At least one source file is required!",
+            "not_a_list": "Files must be a list!",
+            "invalid": "Files must be a list!",
         },
     )
 
@@ -74,6 +82,9 @@ class ProcessWorkItemSerializer(serializers.Serializer):
         if WorkItem.objects.filter(item_code=item_code).exists():
             raise serializers.ValidationError("Item code already exists!")
         return item_code
+
+    def validate_name(self, value):
+        return coerce_optional_string(value)
 
     def validate(self, attrs):
         request = self.context["request"]

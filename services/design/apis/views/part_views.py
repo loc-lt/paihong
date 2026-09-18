@@ -22,6 +22,7 @@ class PartViewSet(viewsets.ViewSet):
         part = Part.objects.select_related(
             "preview_file",
             "source_document__file",
+            "source_document__svg_file",
         ).get(pk=part.pk)
         return success_response(
             PartDetailSerializer(part).data,

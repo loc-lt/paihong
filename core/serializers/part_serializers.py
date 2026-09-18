@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from core.constant import PartStatusEnum
 from core.models import Part
+from core.serializers.fields import coerce_optional_string
 from core.serializers.file_serializers import FileObjectSerializer
 from core.serializers.source_document_serializers import SourceDocumentSerializer
 
@@ -28,26 +29,33 @@ class PartSerializer(serializers.ModelSerializer):
             "created",
             "modified",
         ]
-        read_only_fields = [
-            "id",
-            "source_document",
-            "work_item_id",
-            "sequence",
-            "created_by",
-            "updated_by",
-            "created",
-            "modified",
-        ]
+        read_only_fields = fields
 
 
 class PartDetailSerializer(PartSerializer):
     source_document = SourceDocumentSerializer(read_only=True)
 
 
+class PartWithStepsProgressSerializer(PartSerializer):
+    total_steps = serializers.IntegerField(read_only=True)
+    completed_steps = serializers.IntegerField(read_only=True)
+
+    class Meta(PartSerializer.Meta):
+        fields = PartSerializer.Meta.fields + ["total_steps", "completed_steps"]
+        read_only_fields = fields
+
+
+class WorkItemPartsListSerializer(serializers.Serializer):
+    parts = PartSerializer(many=True, read_only=True)
+    total_parts = serializers.IntegerField(read_only=True)
+    completed_parts = serializers.IntegerField(read_only=True)
+
+
 class UpdatePartSerializer(serializers.ModelSerializer):
     name = serializers.CharField(
         required=False,
         allow_blank=True,
+        allow_null=True,
         max_length=255,
         trim_whitespace=True,
         error_messages={
@@ -71,6 +79,9 @@ class UpdatePartSerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
         kwargs["partial"] = True
         super().__init__(*args, **kwargs)
+
+    def validate_name(self, value):
+        return coerce_optional_string(value)
 
     def update(self, instance, validated_data):
         user = self.context["request"].user

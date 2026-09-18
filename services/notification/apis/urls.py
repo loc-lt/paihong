@@ -4,8 +4,8 @@ from rest_framework.routers import DefaultRouter
 
 from .views import NotificationsViewSet
 
-router = routers.DefaultRouter()
-router = DefaultRouter()
+router = routers.DefaultRouter(trailing_slash=False)
+router = DefaultRouter(trailing_slash=False)
 router.register(r"v1/notifications", NotificationsViewSet, basename="notification")
 
 urlpatterns = [

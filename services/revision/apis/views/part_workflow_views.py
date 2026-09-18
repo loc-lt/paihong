@@ -4,7 +4,8 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 
-from core.constant import RevisionTypeEnum
+from core.constant import RevisionTypeEnum, StepStatusEnum
+from core.exceptions import RevisionConflict
 from core.filters import StepRevisionFilter
 from core.models import Part, PartStep, StepRevision, WorkflowStepDefinition
 from core.paginators import CustomPaginator
@@ -13,6 +14,7 @@ from core.responses import revision_conflict_response, success_response
 from core.serializers.revision_serializers import (
     PartStepDetailSerializer,
     PartStepSerializer,
+    PartStepsListSerializer,
     RestoreRevisionSerializer,
     SaveStepRevisionSerializer,
     StepRevisionDetailSerializer,
@@ -45,8 +47,18 @@ class PartWorkflowViewSet(viewsets.ViewSet):
             "latest_revision",
             "official_revision",
         ).order_by("step__sequence")
+        steps = list(queryset)
+        serializer = PartStepsListSerializer(
+            {
+                "steps": steps,
+                "total_steps": len(steps),
+                "completed_steps": sum(
+                    1 for step in steps if step.status == StepStatusEnum.DONE.value
+                ),
+            }
+        )
         return success_response(
-            PartStepSerializer(queryset, many=True).data,
+            serializer.data,
             "Part steps retrieved successfully!",
         )
 
@@ -164,8 +176,10 @@ class PartWorkflowViewSet(viewsets.ViewSet):
                     revision_type=revision_type,
                     mark_step_done=mark_step_done,
                 )
-            except ValidationError as exc:
+            except RevisionConflict as exc:
                 return revision_conflict_response(exc)
+            except ValidationError as exc:
+                return global_response_errors(exc.detail)
             return success_response(
                 StepRevisionDetailSerializer(revision).data,
                 message,
@@ -214,8 +228,10 @@ class RevisionViewSet(viewsets.ViewSet):
         if serializer.is_valid():
             try:
                 new_revision = serializer.restore(revision=revision)
-            except ValidationError as exc:
+            except RevisionConflict as exc:
                 return revision_conflict_response(exc)
+            except ValidationError as exc:
+                return global_response_errors(exc.detail)
             return success_response(
                 StepRevisionDetailSerializer(new_revision).data,
                 "Revision restored successfully!",

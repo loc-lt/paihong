@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 from core.constant import INTEGER_FIELD_MAX_VALUE, POSITIVE_SMALL_INTEGER_MAX_VALUE
 from core.models import TemplateStep, WorkflowStepDefinition, WorkflowTemplate
-from core.serializers.fields import BoundedPrimaryKeyRelatedField
+from core.serializers.fields import BoundedPrimaryKeyRelatedField, coerce_optional_string
 
 
 class WorkflowStepDefinitionSerializer(serializers.ModelSerializer):
@@ -19,6 +19,7 @@ class WorkflowStepDefinitionSerializer(serializers.ModelSerializer):
             "is_active",
             "settings_schema_key",
         ]
+        read_only_fields = fields
 
 
 class TemplateStepSerializer(serializers.ModelSerializer):
@@ -51,7 +52,7 @@ class TemplateStepSerializer(serializers.ModelSerializer):
             "is_required",
             "settings_schema_version",
         ]
-        read_only_fields = ["id", "step_code", "step_name"]
+        read_only_fields = fields
 
 
 class WorkflowTemplateSerializer(serializers.ModelSerializer):
@@ -70,7 +71,7 @@ class WorkflowTemplateSerializer(serializers.ModelSerializer):
             "created",
             "modified",
         ]
-        read_only_fields = ["id", "created", "modified"]
+        read_only_fields = fields
 
 
 class TemplateStepInputSerializer(serializers.Serializer):
@@ -85,6 +86,8 @@ class TemplateStepInputSerializer(serializers.Serializer):
             "max_string_length": "Workflow step ID is too large!",
         },
         error_messages={
+            "required": "Workflow step is required!",
+            "null": "Workflow step is required!",
             "does_not_exist": "Workflow step not found!",
             "incorrect_type": "Workflow step must be an integer ID!",
         },
@@ -106,10 +109,12 @@ class TemplateStepInputSerializer(serializers.Serializer):
         default=True,
         error_messages={
             "invalid": "Is required must be true or false!",
+            "null": "Is required must be true or false!",
         },
     )
     settings_schema_version = serializers.IntegerField(
         required=False,
+        allow_null=True,
         min_value=1,
         max_value=INTEGER_FIELD_MAX_VALUE,
         default=1,
@@ -120,6 +125,11 @@ class TemplateStepInputSerializer(serializers.Serializer):
             "max_string_length": "Settings schema version is too large!",
         },
     )
+
+    def validate_settings_schema_version(self, value):
+        if value is None:
+            return 1
+        return value
 
 
 class CreateWorkflowTemplateSerializer(serializers.ModelSerializer):
@@ -150,6 +160,7 @@ class CreateWorkflowTemplateSerializer(serializers.ModelSerializer):
     description = serializers.CharField(
         required=False,
         allow_blank=True,
+        allow_null=True,
         trim_whitespace=True,
         error_messages={
             "invalid": "Description must be a string!",
@@ -160,6 +171,7 @@ class CreateWorkflowTemplateSerializer(serializers.ModelSerializer):
         default=True,
         error_messages={
             "invalid": "Is active must be true or false!",
+            "null": "Is active must be true or false!",
         },
     )
     is_default = serializers.BooleanField(
@@ -167,15 +179,19 @@ class CreateWorkflowTemplateSerializer(serializers.ModelSerializer):
         default=False,
         error_messages={
             "invalid": "Is default must be true or false!",
+            "null": "Is default must be true or false!",
         },
     )
     template_steps = TemplateStepInputSerializer(
         many=True,
         required=True,
+        allow_empty=False,
         error_messages={
             "required": "Template steps are required!",
             "null": "Template steps are required!",
             "empty": "At least one template step is required!",
+            "not_a_list": "Template steps must be a list!",
+            "invalid": "Template steps must be a list!",
         },
     )
 
@@ -194,6 +210,8 @@ class CreateWorkflowTemplateSerializer(serializers.ModelSerializer):
         code = value.strip().upper()
         if not code:
             raise serializers.ValidationError("Template code cannot be empty!")
+        if WorkflowTemplate.objects.filter(code=code).exists():
+            raise serializers.ValidationError("Template code already exists!")
         return code
 
     def validate_template_steps(self, value):
@@ -241,6 +259,7 @@ class UpdateWorkflowTemplateSerializer(serializers.ModelSerializer):
     description = serializers.CharField(
         required=False,
         allow_blank=True,
+        allow_null=True,
         trim_whitespace=True,
         error_messages={
             "invalid": "Description must be a string!",
@@ -250,15 +269,27 @@ class UpdateWorkflowTemplateSerializer(serializers.ModelSerializer):
         required=False,
         error_messages={
             "invalid": "Is active must be true or false!",
+            "null": "Is active must be true or false!",
         },
     )
     is_default = serializers.BooleanField(
         required=False,
         error_messages={
             "invalid": "Is default must be true or false!",
+            "null": "Is default must be true or false!",
         },
     )
-    template_steps = TemplateStepInputSerializer(many=True, required=False)
+    template_steps = TemplateStepInputSerializer(
+        many=True,
+        required=False,
+        allow_empty=False,
+        error_messages={
+            "null": "Template steps are required!",
+            "empty": "At least one template step is required!",
+            "not_a_list": "Template steps must be a list!",
+            "invalid": "Template steps must be a list!",
+        },
+    )
 
     class Meta:
         model = WorkflowTemplate
@@ -352,6 +383,7 @@ class WorkflowStepDefinitionWriteSerializer(serializers.ModelSerializer):
     description = serializers.CharField(
         required=False,
         allow_blank=True,
+        allow_null=True,
         trim_whitespace=True,
         error_messages={
             "invalid": "Description must be a string!",
@@ -359,6 +391,7 @@ class WorkflowStepDefinitionWriteSerializer(serializers.ModelSerializer):
     )
     version = serializers.IntegerField(
         required=False,
+        allow_null=True,
         min_value=1,
         max_value=INTEGER_FIELD_MAX_VALUE,
         default=1,
@@ -374,11 +407,13 @@ class WorkflowStepDefinitionWriteSerializer(serializers.ModelSerializer):
         default=True,
         error_messages={
             "invalid": "Is active must be true or false!",
+            "null": "Is active must be true or false!",
         },
     )
     settings_schema_key = serializers.CharField(
         required=False,
         allow_blank=True,
+        allow_null=True,
         max_length=100,
         trim_whitespace=True,
         error_messages={
@@ -399,5 +434,34 @@ class WorkflowStepDefinitionWriteSerializer(serializers.ModelSerializer):
             "settings_schema_key",
         ]
 
+    def _exclude_self(self, queryset):
+        if self.instance:
+            return queryset.exclude(pk=self.instance.pk)
+        return queryset
+
     def validate_code(self, value):
-        return value.strip().upper()
+        code = value.strip().upper()
+        if not code:
+            raise serializers.ValidationError("Step code cannot be empty!")
+        existing = self._exclude_self(
+            WorkflowStepDefinition.objects.filter(code=code)
+        )
+        if existing.exists():
+            raise serializers.ValidationError("Step code already exists!")
+        return code
+
+    def validate_sequence(self, value):
+        existing = self._exclude_self(
+            WorkflowStepDefinition.objects.filter(sequence=value)
+        )
+        if existing.exists():
+            raise serializers.ValidationError("Step sequence already exists!")
+        return value
+
+    def validate_settings_schema_key(self, value):
+        return coerce_optional_string(value)
+
+    def validate_version(self, value):
+        if value is None:
+            return 1
+        return value

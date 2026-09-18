@@ -3,6 +3,7 @@ from drf_spectacular.utils import OpenApiResponse
 from core.serializers.revision_serializers import (
     PartStepDetailSerializer,
     PartStepSerializer,
+    PartStepsListSerializer,
     RestoreRevisionSerializer,
     SaveStepRevisionSerializer,
     StepRevisionDetailSerializer,
@@ -18,7 +19,8 @@ _SAVE_REVISION_DESCRIPTION = (
 
 get_part_steps_document = {
     "summary": "List part steps.",
-    "responses": {200: PartStepSerializer(many=True)},
+    "description": "Returns all steps plus total_steps and completed_steps (status = done).",
+    "responses": {200: PartStepsListSerializer},
 }
 
 sync_part_steps_document = {
