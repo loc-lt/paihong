@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from core.constant import INTEGER_FIELD_MAX_VALUE
+from core.services.step_settings import normalize_incoming_settings
 
 
 class AnchorSerializer(serializers.Serializer):
@@ -20,17 +21,39 @@ class AnchorSerializer(serializers.Serializer):
     )
 
 
+class BboxSerializer(serializers.Serializer):
+    x = serializers.FloatField(min_value=0)
+    y = serializers.FloatField(min_value=0)
+    w = serializers.FloatField(min_value=0)
+    h = serializers.FloatField(min_value=0)
+
+
+class PickUpperCandidateSerializer(serializers.Serializer):
+    index = serializers.IntegerField(min_value=0, max_value=INTEGER_FIELD_MAX_VALUE)
+    med = serializers.BooleanField(required=False, default=False)
+    lat = serializers.BooleanField(required=False, default=False)
+    size = serializers.IntegerField(required=False, allow_null=True, min_value=0)
+    width_mm = serializers.FloatField(required=False, allow_null=True, min_value=0)
+    height_mm = serializers.FloatField(required=False, allow_null=True, min_value=0)
+    label = serializers.CharField(required=False, allow_blank=True, default="")
+    side = serializers.CharField(required=False, allow_blank=True, default="")
+    variant = serializers.CharField(required=False, allow_blank=True, default="")
+    size_class = serializers.CharField(required=False, allow_blank=True, default="")
+    suggested_rotation_deg = serializers.FloatField(required=False, allow_null=True)
+    preview_artifact_id = serializers.UUIDField(required=False, allow_null=True)
+    bbox = BboxSerializer(required=False)
+
+
 class StepPickUpperSettingsSerializer(serializers.Serializer):
-    selected_candidate = serializers.IntegerField(
+    selected_candidate_index = serializers.IntegerField(
         min_value=0,
         max_value=INTEGER_FIELD_MAX_VALUE,
         error_messages={
-            "required": "Selected candidate is required!",
-            "invalid": "Selected candidate must be an integer!",
-            "null": "Selected candidate is required!",
-            "min_value": "Selected candidate cannot be negative!",
-            "max_value": "Selected candidate is too large!",
-            "max_string_length": "Selected candidate is too large!",
+            "required": "Selected candidate index is required!",
+            "invalid": "Selected candidate index must be an integer!",
+            "null": "Selected candidate index is required!",
+            "min_value": "Selected candidate index cannot be negative!",
+            "max_value": "Selected candidate index is too large!",
         },
     )
     rotation = serializers.FloatField(
@@ -40,6 +63,7 @@ class StepPickUpperSettingsSerializer(serializers.Serializer):
             "null": "Rotation is required!",
         },
     )
+    candidates = PickUpperCandidateSerializer(many=True, required=False, default=list)
 
 
 class StepFixLinesByAnchorSettingsSerializer(serializers.Serializer):
@@ -74,6 +98,28 @@ class StepFixLinesByAnchorSettingsSerializer(serializers.Serializer):
     )
 
 
+class LayerAssignmentSerializer(serializers.Serializer):
+    color = serializers.CharField(required=False, allow_blank=True, default="")
+    line_ids = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        default=list,
+    )
+
+
+class ManualOverrideSerializer(serializers.Serializer):
+    line_id = serializers.CharField()
+    layer = serializers.CharField()
+
+
+class StepCheckColorsSettingsSerializer(serializers.Serializer):
+    layers = serializers.JSONField(required=False, default=dict)
+    manual_overrides = ManualOverrideSerializer(many=True, required=False, default=list)
+    frame_expansion_mm = serializers.FloatField(required=False, default=0, min_value=0)
+    corner_type = serializers.CharField(required=False, default="sharp")
+    corner_limit = serializers.IntegerField(required=False, default=4, min_value=0)
+
+
 class CanvasSerializer(serializers.Serializer):
     width_mm = serializers.FloatField(
         min_value=0,
@@ -96,61 +142,86 @@ class CanvasSerializer(serializers.Serializer):
 
 
 class OriginSerializer(serializers.Serializer):
-    x = serializers.FloatField(
-        error_messages={
-            "required": "Origin X coordinate is required!",
-            "invalid": "Origin X coordinate must be a number!",
-            "null": "Origin X coordinate is required!",
-        },
-    )
-    y = serializers.FloatField(
-        error_messages={
-            "required": "Origin Y coordinate is required!",
-            "invalid": "Origin Y coordinate must be a number!",
-            "null": "Origin Y coordinate is required!",
-        },
-    )
+    x = serializers.FloatField()
+    y = serializers.FloatField()
+
+
+class CanvasBasisSerializer(serializers.Serializer):
+    outer_contour_line_count = serializers.IntegerField(required=False, default=0, min_value=0)
+    measured_line_count = serializers.IntegerField(required=False, default=0, min_value=0)
+    center_cross_included = serializers.BooleanField(required=False, default=False)
 
 
 class StepCanvasFrameSettingsSerializer(serializers.Serializer):
-    canvas = CanvasSerializer(
+    canvas = CanvasSerializer()
+    origin = OriginSerializer()
+    scale = serializers.FloatField(min_value=0)
+    basis = CanvasBasisSerializer(required=False)
+
+
+class GridPixelsSerializer(serializers.Serializer):
+    width = serializers.IntegerField(min_value=1)
+    height = serializers.IntegerField(min_value=1)
+
+
+class SourceMeasurementsSerializer(serializers.Serializer):
+    width = serializers.FloatField(min_value=0)
+    height = serializers.FloatField(min_value=0)
+
+
+class StepEnterSpecsSettingsSerializer(serializers.Serializer):
+    needle_density = serializers.IntegerField(
+        min_value=1,
         error_messages={
-            "required": "Canvas settings are required!",
-            "null": "Canvas settings are required!",
+            "required": "Needle density is required!",
+            "invalid": "Needle density must be an integer!",
+            "null": "Needle density is required!",
+            "min_value": "Needle density must be at least 1!",
         },
     )
-    origin = OriginSerializer(
+    cos_number = serializers.IntegerField(
+        min_value=1,
         error_messages={
-            "required": "Origin settings are required!",
-            "null": "Origin settings are required!",
+            "required": "Cos number is required!",
+            "invalid": "Cos number must be an integer!",
+            "null": "Cos number is required!",
+            "min_value": "Cos number must be at least 1!",
         },
     )
-    scale = serializers.FloatField(
-        min_value=0,
+    course_per_pixel = serializers.IntegerField(
+        min_value=1,
         error_messages={
-            "required": "Scale is required!",
-            "invalid": "Scale must be a number!",
-            "null": "Scale is required!",
-            "min_value": "Scale cannot be negative!",
+            "required": "Course per pixel is required!",
+            "invalid": "Course per pixel must be an integer!",
+            "null": "Course per pixel is required!",
+            "min_value": "Course per pixel must be at least 1!",
         },
     )
+    grid_pixels = GridPixelsSerializer(required=False)
+    source_measurements_mm = SourceMeasurementsSerializer(required=False)
 
 
-STEP_SETTINGS_SERIALIZER_MAP = {
-    # "PICK_UPPER": StepPickUpperSettingsSerializer,
-    # "FIX_LINES_BY_ANCHOR": StepFixLinesByAnchorSettingsSerializer,
-    # "CANVAS_FRAME_MEASURE": StepCanvasFrameSettingsSerializer,
-}
+class StepBuildGridSettingsSerializer(serializers.Serializer):
+    grid = GridPixelsSerializer()
+    conversion = serializers.DictField(required=False, default=dict)
+    grid_snapshot_id = serializers.UUIDField(required=False, allow_null=True)
 
 
-def validate_step_settings(step_code: str, settings: dict, schema_key: str = "") -> dict:
-    lookup_key = schema_key or step_code
-    serializer_cls = STEP_SETTINGS_SERIALIZER_MAP.get(lookup_key)
-    if not serializer_cls:
-        serializer_cls = STEP_SETTINGS_SERIALIZER_MAP.get(step_code)
-    if not serializer_cls:
-        return settings or {}
+class StepStartDesigningSettingsSerializer(serializers.Serializer):
+    active_file_type = serializers.CharField(required=False, default="S1")
+    progress = serializers.DictField(required=False, default=dict)
 
-    serializer = serializer_cls(data=settings or {})
-    serializer.is_valid(raise_exception=True)
-    return serializer.validated_data
+
+# Schemas kept for reference/docs; validation disabled — settings are stored as JSON pass-through.
+STEP_SETTINGS_SERIALIZER_MAP: dict[str, type[serializers.Serializer]] = {}
+
+
+def validate_step_settings(
+    step_code: str,
+    settings: dict,
+    schema_key: str = "",
+    *,
+    default_source: str = "manual",
+) -> dict:
+    del step_code, schema_key
+    return normalize_incoming_settings(settings, default_source=default_source)
