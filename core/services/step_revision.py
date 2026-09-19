@@ -1,5 +1,6 @@
 import hashlib
 import json
+from dataclasses import dataclass
 
 from django.db import transaction
 from django.db.models import Max
@@ -7,17 +8,27 @@ from django.utils import timezone
 
 from core.constant import (
     AUTOSAVE_KEEP_LATEST,
+    STEP_SETTINGS_SOURCE_BOOTSTRAP,
     RevisionTypeEnum,
     StepStatusEnum,
 )
 from core.exceptions import RevisionConflict
 from core.models import PartStep, RevisionArtifact, StepRevision
 from core.services.file_storage import store_uploaded_file
+from core.services.step_handlers.base import run_step_complete_handler
+from core.services.step_settings import unwrap_settings
 from core.serializers.step_settings_serializers import validate_step_settings
 
 
+@dataclass
+class StepRevisionResult:
+    revision: StepRevision
+    next_step_settings: dict | None = None
+
+
 def _settings_hash(settings_data: dict) -> str:
-    normalized = json.dumps(settings_data or {}, sort_keys=True, separators=(",", ":"))
+    data, _meta = unwrap_settings(settings_data)
+    normalized = json.dumps(data or {}, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
@@ -61,10 +72,16 @@ def create_step_revision(
     settings_schema_version=1,
     mark_step_in_progress=True,
     mark_step_done=False,
-):
+    settings_source: str = "manual",
+) -> StepRevision | StepRevisionResult:
     step_code = part_step.step.code
     schema_key = part_step.step.settings_schema_key or step_code
-    validated_settings = validate_step_settings(step_code, settings or {}, schema_key)
+    validated_settings = validate_step_settings(
+        step_code,
+        settings or {},
+        schema_key,
+        default_source=settings_source,
+    )
     settings_digest = _settings_hash(validated_settings)
 
     if not mark_step_done:
@@ -76,6 +93,11 @@ def create_step_revision(
         and part_step.latest_revision.settings_hash == settings_digest
         and not artifacts
     ):
+        if mark_step_done:
+            return StepRevisionResult(
+                revision=part_step.latest_revision,
+                next_step_settings=None,
+            )
         return part_step.latest_revision
 
     revision = StepRevision.objects.create(
@@ -136,12 +158,21 @@ def create_step_revision(
         _cleanup_autosaves(part_step)
 
     if mark_step_done:
+        next_step_settings = run_step_complete_handler(
+            part_step=part_step,
+            revision=revision,
+            user=user,
+        )
         from core.services.part_revert import clear_steps_after
 
         clear_steps_after(
             part=part_step.part,
             after_sequence=part_step.step.sequence,
             user=user,
+        )
+        return StepRevisionResult(
+            revision=revision,
+            next_step_settings=next_step_settings,
         )
 
     return revision

@@ -6,6 +6,7 @@ from core.serializers.fields import BoundedUUIDRelatedField, coerce_optional_str
 from core.serializers.part_serializers import PartWithStepsProgressSerializer
 from core.serializers.source_document_serializers import SourceDocumentSerializer
 from core.services.part_workflow import get_default_workflow_template
+from core.services.work_item_process import resolve_work_item_status
 
 
 class WorkItemSerializer(serializers.ModelSerializer):
@@ -16,6 +17,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
     )
     parts_count = serializers.IntegerField(read_only=True)
     completed_parts = serializers.IntegerField(read_only=True)
+    status = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkItem
@@ -33,6 +35,14 @@ class WorkItemSerializer(serializers.ModelSerializer):
             "modified",
         ]
         read_only_fields = fields
+
+    def get_status(self, obj):
+        return resolve_work_item_status(obj)
+
+
+class WorkItemItemCodeAvailabilitySerializer(serializers.Serializer):
+    item_code = serializers.CharField(read_only=True)
+    available = serializers.BooleanField(read_only=True)
 
 
 class WorkItemDetailSerializer(WorkItemSerializer):

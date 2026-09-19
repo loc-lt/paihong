@@ -42,11 +42,18 @@ class PartWorkflowViewSet(viewsets.ViewSet):
     @action(detail=True, methods=["get"], url_path="steps")
     def steps(self, request, pk=None):
         part = get_instance(Part, pk)
-        queryset = part.steps.select_related(
-            "step",
-            "latest_revision",
-            "official_revision",
-        ).order_by("step__sequence")
+        queryset = (
+            part.steps.select_related(
+                "step",
+                "latest_revision",
+                "official_revision",
+            )
+            .prefetch_related(
+                "latest_revision__artifacts__file",
+                "official_revision__artifacts__file",
+            )
+            .order_by("step__sequence")
+        )
         steps = list(queryset)
         serializer = PartStepsListSerializer(
             {
@@ -171,7 +178,7 @@ class PartWorkflowViewSet(viewsets.ViewSet):
         )
         if serializer.is_valid():
             try:
-                revision = serializer.create_revision(
+                result = serializer.create_revision(
                     part_step=part_step,
                     revision_type=revision_type,
                     mark_step_done=mark_step_done,
@@ -180,8 +187,35 @@ class PartWorkflowViewSet(viewsets.ViewSet):
                 return revision_conflict_response(exc)
             except ValidationError as exc:
                 return global_response_errors(exc.detail)
+
+            revision = (
+                StepRevision.objects.prefetch_related("artifacts__file")
+                .get(pk=result.revision.pk)
+            )
+            response_data = StepRevisionDetailSerializer(revision).data
+            if mark_step_done:
+                next_settings = result.next_step_settings
+                if next_settings:
+                    from core.services.step_settings import unwrap_settings
+
+                    settings_payload, settings_meta = unwrap_settings(
+                        next_settings.get("settings")
+                    )
+                    response_data = {
+                        "revision": response_data,
+                        "next_step_settings": {
+                            "step_code": next_settings.get("step_code"),
+                            "settings": settings_payload,
+                            "meta": settings_meta,
+                        },
+                    }
+                else:
+                    response_data = {
+                        "revision": response_data,
+                        "next_step_settings": None,
+                    }
             return success_response(
-                StepRevisionDetailSerializer(revision).data,
+                response_data,
                 message,
                 status.HTTP_201_CREATED,
             )

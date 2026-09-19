@@ -2,7 +2,12 @@ from django.db import transaction
 from django.db.models import Count, Exists, IntegerField, OuterRef, Subquery
 from django.db.models.functions import Coalesce
 
-from core.constant import StepStatusEnum, WorkItemStatusEnum
+from core.constant import (
+    PartStatusEnum,
+    SourceDocumentStatusEnum,
+    StepStatusEnum,
+    WorkItemStatusEnum,
+)
 from core.models import Part, PartStep, SourceDocument, WorkItem
 from core.services.part_detection import process_source_document_with_ai
 from core.services.part_workflow import ensure_work_item_template, get_default_workflow_template
@@ -36,6 +41,14 @@ def _work_item_completed_parts_subquery():
 
 
 def annotate_work_item_parts_progress(queryset):
+    failed_part = Part.objects.filter(
+        source_document__work_item=OuterRef("pk"),
+        status=PartStatusEnum.FAILED.value,
+    )
+    failed_source = SourceDocument.objects.filter(
+        work_item=OuterRef("pk"),
+        status=SourceDocumentStatusEnum.FAILED.value,
+    )
     return queryset.annotate(
         parts_count=Coalesce(
             Subquery(_work_item_parts_subquery(), output_field=IntegerField()),
@@ -47,7 +60,37 @@ def annotate_work_item_parts_progress(queryset):
             ),
             0,
         ),
+        has_failed_part=Exists(failed_part),
+        has_failed_source=Exists(failed_source),
     )
+
+
+def resolve_work_item_status(work_item: WorkItem) -> int:
+    parts_count = getattr(work_item, "parts_count", None)
+    completed_parts = getattr(work_item, "completed_parts", None)
+    if parts_count is None or completed_parts is None:
+        annotated = (
+            annotate_work_item_parts_progress(WorkItem.objects.filter(pk=work_item.pk))
+            .first()
+        )
+        if annotated:
+            work_item = annotated
+            parts_count = annotated.parts_count
+            completed_parts = annotated.completed_parts
+
+    if getattr(work_item, "has_failed_part", False) or getattr(
+        work_item, "has_failed_source", False
+    ):
+        return WorkItemStatusEnum.FAILED.value
+
+    parts_count = parts_count or 0
+    completed_parts = completed_parts or 0
+
+    if parts_count == 0:
+        return WorkItemStatusEnum.NEW.value
+    if completed_parts >= parts_count:
+        return WorkItemStatusEnum.COMPLETED.value
+    return WorkItemStatusEnum.DESIGNING.value
 
 
 @transaction.atomic

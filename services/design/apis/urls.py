@@ -2,9 +2,11 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    ColorViewSet,
     PartViewSet,
     SourceDocumentPartViewSet,
     SourceDocumentViewSet,
+    SystemColorViewSet,
     WorkItemViewSet,
     WorkflowStepDefinitionViewSet,
     WorkflowTemplateViewSet,
@@ -16,6 +18,8 @@ router.register(r"v1/source_documents", SourceDocumentViewSet, basename="source-
 router.register(r"v1/parts", PartViewSet, basename="part")
 router.register(r"v1/workflow_templates", WorkflowTemplateViewSet, basename="workflow-template")
 router.register(r"v1/workflow_steps", WorkflowStepDefinitionViewSet, basename="workflow-step")
+router.register(r"v1/colors", ColorViewSet, basename="color")
+router.register(r"v1/system_colors", SystemColorViewSet, basename="system-color")
 
 urlpatterns = [
     path("", include(router.urls)),

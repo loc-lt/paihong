@@ -77,6 +77,9 @@ User (soft delete)
  │                 FileObject ◄────────────┴── preview_file / artifacts / source file
  │
 WorkflowTemplate ──N──► TemplateStep ──► WorkflowStepDefinition
+
+PartStep (START_DESIGNING) ──1──► DesignWorkspace ──N──► DesignFile ──N──► DesignFileRevision ──► FileObject (snapshot/tiles)
+ColorDefinition ◄── UserColorPreference ──► User
 ```
 
 **Quy ước quan hệ:**
@@ -235,6 +238,25 @@ Property: `work_item` → `source_document.work_item`.
 | `role`, `sequence` | unique `(revision, role, sequence)` |
 | `filename`, `metadata` | |
 
+### 5.11 DesignWorkspace / DesignFile / DesignFileRevision (step 10)
+
+| Model | Ghi chú |
+|-------|---------|
+| `DesignWorkspace` | 1:1 `PartStep` (START_DESIGNING); `settings` JSON nhẹ (active_file_type, progress) |
+| `DesignFile` | unique `(workspace, file_type)`; file types `S1,C,H,SIM,P,FC,F,KMO` |
+| `DesignFileRevision` | immutable revisions; `layers[]`, `grid_width/height`, `snapshot_file` → FileObject (gzip JSON tile map), optional `preview_file`, `tile_manifest` |
+
+Grid body **không** lưu trong PostgreSQL rows — snapshot + tile blobs trên object storage (`GRID_TILE_SIZE=256`, schema v1).
+
+### 5.12 ColorDefinition / UserColorPreference
+
+| Model | Ghi chú |
+|-------|---------|
+| `ColorDefinition` | System palette: `code`, `hex_value`, `name`, `default_order`, `is_system` |
+| `UserColorPreference` | User overrides/custom colors + `display_order` |
+
+Grid snapshot references `color_id`, not duplicated hex.
+
 ---
 
 ## 6. Nghiệp vụ chính
@@ -289,7 +311,7 @@ Dependencies design service: `pymupdf`, `ezdxf`, `matplotlib`.
 | Step | Settings | Artifact role |
 |------|----------|---------------|
 | RECEIVE_FILES | `{}` | `SOURCE_FILE` → file gốc SourceDocument |
-| PICK_UPPER | `{ selected_candidate: 0, rotation: 0.0 }` | `PREVIEW_IMAGE` → `part.preview_file` |
+| PICK_UPPER | `{ selected_candidate_index, rotation, candidates[] }` | `PREVIEW_IMAGE` → `part.preview_file` |
 
 User bắt đầu làm từ bước **3** (`ROTATE_STRIP_TEXT`) qua revision service.
 
@@ -310,14 +332,44 @@ Service trung tâm: `create_step_revision()` (`core/services/step_revision.py`).
 |----------|---------------|---------|
 | `POST .../autosave/` | 1 Autosave | Dedup nếu settings hash giống + không file mới; giữ 12 autosave gần nhất |
 | `POST .../save/` | 2 Manual | Tạo revision mới |
-| `POST .../complete/` | 3 Official | Set `official_revision`, mark step **DONE**, gọi `clear_steps_after` |
+| `POST .../complete/` | 3 Official | Set `official_revision`, mark step **DONE**, gọi `clear_steps_after`, trả **`next_step_settings`** |
+
+**Settings wrapper** — mọi revision lưu dạng `{ data, meta }` trong DB; API GET trả `settings` (unwrap `data`) + `settings_meta` riêng.
+
+`meta.source`: `manual` | `bootstrap` | `propagated` | `ai` | `restored` | `grid_import`.
+
+**`STEP_SETTINGS_POLICY`** (`core/constant.py`) — expose qua `GET /workflow_steps/` field `settings_policy` (has_settings, input_mode, schema_key, on_complete).
+
+**Complete response** (khi có propagate):
+
+```json
+{
+  "revision": { "... StepRevisionDetail ..." },
+  "next_step_settings": {
+    "step_code": "CANVAS_FRAME_MEASURE",
+    "settings": { "... data ..." },
+    "meta": { "source": "ai", "from_step_code": "CHECK_COLORS" }
+  }
+}
+```
 
 **Settings validation** (`step_settings_serializers.py`):
 
-- `PICK_UPPER`: `{ selected_candidate, rotation }`
+- `PICK_UPPER`: `{ selected_candidate_index, rotation, candidates[] }`
 - `FIX_LINES_BY_ANCHOR`: `{ anchors[], snap_distance, tolerance }`
-- `CANVAS_FRAME_MEASURE`: `{ canvas{width_mm,height_mm}, origin{x,y}, scale }`
-- Step khác: pass-through (chưa có schema riêng).
+- `CHECK_COLORS`: `{ layers, manual_overrides[], frame_expansion_mm, corner_type, corner_limit }`
+- `CANVAS_FRAME_MEASURE`: `{ canvas{width_mm,height_mm}, origin{x,y}, scale, basis{} }`
+- `ENTER_SPECS`: `{ needle_density, cos_number, course_per_pixel, grid_pixels, source_measurements_mm }` — server tính `grid_pixels` khi complete
+- `BUILD_GRID`: `{ grid{width,height}, conversion{}, grid_snapshot_id }`
+- `START_DESIGNING`: `{ active_file_type, progress{} }` — metadata; grid body qua DesignWorkspace
+
+**Step complete handlers** (`core/services/step_handlers/`):
+
+| Step complete | Handler | next_step_settings |
+|---------------|---------|-------------------|
+| CHECK_COLORS | AI bridge (`check_colors_ai`) | CANVAS_FRAME_MEASURE |
+| ENTER_SPECS | Grid pixel calc | BUILD_GRID |
+| BUILD_GRID | Grid snapshot + init workspace | START_DESIGNING |
 
 ### 6.5 Complete step — re-complete & xóa step sau
 
@@ -330,6 +382,7 @@ Khi `POST .../steps/{step_code}/complete/`:
 3. Gọi `clear_steps_after(part, after_sequence=step.sequence)`:
    - Hard-delete **tất cả StepRevision** (và artifacts) của các PartStep có `step.sequence` **lớn hơn** bước vừa complete.
    - Reset các PartStep đó: `NOT_STARTED`, xóa timestamps, `latest_revision`, `official_revision`.
+   - Xóa **DesignWorkspace** + blobs step 10 (nếu có).
 
 **Ví dụ:** đã làm bước 1→5, quay lại bước 2 và complete → xóa sạch revision bước 3, 4, 5.
 
@@ -414,6 +467,23 @@ Default users (seeder): `admin`, `designer`, `developer` — password `Defaultpa
 | POST | `/api/v1/parts/{id}/steps/{step_code}/complete/` | Staff | Official + clear steps after |
 | GET | `/api/v1/revisions/{id}/` | User | |
 | POST | `/api/v1/revisions/{id}/restore/` | Staff | |
+| GET | `/api/v1/parts/{id}/steps/START_DESIGNING/workspace/` | User | Workspace + file list + lock state |
+| GET | `/api/v1/parts/{id}/steps/START_DESIGNING/files/{type}/` | User | Official/latest revision summary |
+| GET | `/api/v1/parts/{id}/steps/START_DESIGNING/files/{type}/revisions/` | User | Revision history |
+| POST | `/api/v1/parts/{id}/steps/START_DESIGNING/files/{type}/autosave/` | Staff | Design file autosave |
+| POST | `/api/v1/parts/{id}/steps/START_DESIGNING/files/{type}/save/` | Staff | Design file manual save |
+| POST | `/api/v1/parts/{id}/steps/START_DESIGNING/files/{type}/complete/` | Staff | Merge tiles → official; advance S1→KMO |
+| GET | `/api/v1/design_file_revisions/{id}/tiles/?x0&y0&x1&y1` | User | Viewport tile load |
+| PATCH | `/api/v1/design_file_revisions/{id}/tiles/` | Staff | Batch tile upload |
+| POST | `/api/v1/design_file_revisions/{id}/restore/` | Staff | Restore design file revision |
+| GET | `/api/v1/colors/` | User | Merged system + user palette |
+| POST | `/api/v1/colors/` | Staff | Add user color preference |
+| DELETE | `/api/v1/colors/{id}/` | Staff | Remove user color |
+| GET | `/api/v1/system_colors/` | User | System palette only |
+
+**Design file sequence:** `S1 → C → H → SIM → P → FC → F → KMO` (`DESIGN_FILE_SEQUENCE`). File `C` locked until `S1` has official revision.
+
+Seed colors: `python manage.py seed_system_colors`.
 
 ### 7.4 API đã **loại bỏ** (không còn trong code)
 

@@ -8,14 +8,24 @@ from core.serializers.work_item_process_serializers import (
 from core.serializers.work_item_serializers import (
     UpdateWorkItemSerializer,
     WorkItemDetailSerializer,
+    WorkItemItemCodeAvailabilitySerializer,
     WorkItemSerializer,
 )
+
+get_item_code_availability_document = {
+    "summary": "Check item code availability before creating a work item.",
+    "description": (
+        "Returns whether the item code is available (not yet used). "
+        "Match is case-insensitive."
+    ),
+    "responses": {200: WorkItemItemCodeAvailabilitySerializer},
+}
 
 get_work_items_document = {
     "summary": "List work items.",
     "description": (
-        "Each work item includes parts_count and completed_parts "
-        "(a part is completed when every step is done)."
+        "Each work item includes parts_count, completed_parts, and a derived status "
+        "(New / Designing / Completed / Failed) based on part progress."
     ),
     "responses": {200: WorkItemSerializer(many=True)},
 }

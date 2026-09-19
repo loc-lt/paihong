@@ -129,11 +129,86 @@ PART_STATUS_DESCRIPTION = choices_description(PartStatusEnum, "Part status")
 STEP_STATUS_DESCRIPTION = choices_description(StepStatusEnum, "Step status")
 REVISION_TYPE_DESCRIPTION = choices_description(RevisionTypeEnum, "Revision type")
 
-BOOTSTRAP_DONE_STEP_CODES = ("RECEIVE_FILES", "PICK_UPPER")
+BOOTSTRAP_DONE_STEP_CODES = ("RECEIVE_FILES")
 WORKFLOW_ACTIVE_START_STEP_CODE = "ROTATE_STRIP_TEXT"
 
 BOOTSTRAP_STEP_SETTINGS = {
-    "PICK_UPPER": {"selected_candidate": 0, "rotation": 0.0},
+    "PICK_UPPER": {
+        "selected_candidate_index": 0,
+        "rotation": 0.0,
+        "candidates": [],
+    },
+}
+
+DESIGN_FILE_SEQUENCE = ("S1", "C", "H", "SIM", "P", "FC", "F", "KMO")
+
+GRID_TILE_SIZE = 256
+GRID_SNAPSHOT_SCHEMA_VERSION = 1
+
+STEP_SETTINGS_SOURCE_MANUAL = "manual"
+STEP_SETTINGS_SOURCE_BOOTSTRAP = "bootstrap"
+STEP_SETTINGS_SOURCE_PROPAGATED = "propagated"
+STEP_SETTINGS_SOURCE_AI = "ai"
+STEP_SETTINGS_SOURCE_RESTORED = "restored"
+STEP_SETTINGS_SOURCE_GRID_IMPORT = "grid_import"
+
+STEP_SETTINGS_POLICY = {
+    "RECEIVE_FILES": {"has_settings": False},
+    "PICK_UPPER": {
+        "has_settings": True,
+        "input_mode": "manual",
+        "schema_key": "PICK_UPPER",
+    },
+    "ROTATE_STRIP_TEXT": {
+        "has_settings": True,
+        "input_mode": "manual",
+    },
+    "REMOVE_AUX_LINES": {
+        "has_settings": True,
+        "input_mode": "manual",
+    },
+    "FIX_LINES_BY_ANCHOR": {
+        "has_settings": True,
+        "input_mode": "manual",
+        "schema_key": "FIX_LINES_BY_ANCHOR",
+    },
+    "CHECK_COLORS": {
+        "has_settings": True,
+        "input_mode": "manual",
+        "schema_key": "CHECK_COLORS",
+        "on_complete": {
+            "propagate_to": "CANVAS_FRAME_MEASURE",
+            "via": "ai",
+        },
+    },
+    "CANVAS_FRAME_MEASURE": {
+        "has_settings": True,
+        "input_mode": "propagated_or_edit",
+        "schema_key": "CANVAS_FRAME_MEASURE",
+    },
+    "ENTER_SPECS": {
+        "has_settings": True,
+        "input_mode": "manual",
+        "schema_key": "ENTER_SPECS",
+        "on_complete": {
+            "propagate_to": "BUILD_GRID",
+            "via": "propagated",
+        },
+    },
+    "BUILD_GRID": {
+        "has_settings": True,
+        "input_mode": "manual",
+        "schema_key": "BUILD_GRID",
+        "on_complete": {
+            "propagate_to": "START_DESIGNING",
+            "via": "grid_import",
+        },
+    },
+    "START_DESIGNING": {
+        "has_settings": True,
+        "input_mode": "grid_workspace",
+        "schema_key": "START_DESIGNING",
+    },
 }
 
 BOOTSTRAP_ARTIFACT_ROLES = {
@@ -157,5 +232,9 @@ WORKFLOW_STEP_SEED = [
 STEP_SETTINGS_SCHEMAS = {
     "PICK_UPPER": "StepPickUpperSettingsSerializer",
     "FIX_LINES_BY_ANCHOR": "StepFixLinesByAnchorSettingsSerializer",
+    "CHECK_COLORS": "StepCheckColorsSettingsSerializer",
     "CANVAS_FRAME_MEASURE": "StepCanvasFrameSettingsSerializer",
+    "ENTER_SPECS": "StepEnterSpecsSettingsSerializer",
+    "BUILD_GRID": "StepBuildGridSettingsSerializer",
+    "START_DESIGNING": "StepStartDesigningSettingsSerializer",
 }

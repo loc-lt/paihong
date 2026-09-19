@@ -568,6 +568,201 @@ class RevisionArtifact(TimeStampedModel):
         return f"{self.revision} - {self.role} #{self.sequence}"
 
 
+class DesignWorkspace(TimeStampedModel):
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
+    part_step = models.OneToOneField(
+        PartStep,
+        related_name="design_workspace",
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+    )
+    settings = models.JSONField(default=dict, null=False, blank=True)
+    updated_by = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        related_name="updated_design_workspaces",
+        on_delete=models.SET_NULL,
+    )
+
+    class Meta:
+        db_table = "design_workspace"
+
+    def __str__(self):
+        return f"Workspace for {self.part_step}"
+
+
+class DesignFile(TimeStampedModel):
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
+    workspace = models.ForeignKey(
+        DesignWorkspace,
+        related_name="files",
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+    )
+    file_type = models.CharField(max_length=10, null=False, blank=False, db_index=True)
+    latest_revision = models.ForeignKey(
+        "DesignFileRevision",
+        null=True,
+        blank=True,
+        related_name="+",
+        on_delete=models.SET_NULL,
+    )
+    official_revision = models.ForeignKey(
+        "DesignFileRevision",
+        null=True,
+        blank=True,
+        related_name="+",
+        on_delete=models.SET_NULL,
+    )
+    updated_by = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        related_name="updated_design_files",
+        on_delete=models.SET_NULL,
+    )
+
+    class Meta:
+        db_table = "design_file"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "file_type"],
+                name="uq_design_file_type",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.workspace} - {self.file_type}"
+
+
+class DesignFileRevision(TimeStampedModel):
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
+    design_file = models.ForeignKey(
+        DesignFile,
+        related_name="revisions",
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+    )
+    revision_no = models.PositiveIntegerField(null=False, blank=False)
+    revision_type = models.IntegerField(
+        default=RevisionTypeEnum.MANUAL.value,
+        null=False,
+        blank=False,
+        db_index=True,
+    )
+    parent_revision = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        related_name="child_revisions",
+        on_delete=models.SET_NULL,
+    )
+    layers = models.JSONField(default=list, null=False, blank=True)
+    grid_width = models.PositiveIntegerField(default=0, null=False, blank=False)
+    grid_height = models.PositiveIntegerField(default=0, null=False, blank=False)
+    snapshot_file = models.ForeignKey(
+        FileObject,
+        related_name="design_file_snapshots",
+        on_delete=models.PROTECT,
+        null=False,
+        blank=False,
+    )
+    preview_file = models.ForeignKey(
+        FileObject,
+        null=True,
+        blank=True,
+        related_name="design_file_previews",
+        on_delete=models.SET_NULL,
+    )
+    tile_manifest = models.JSONField(default=dict, null=False, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        related_name="created_design_file_revisions",
+        on_delete=models.SET_NULL,
+    )
+
+    class Meta:
+        db_table = "design_file_revision"
+        ordering = ["-revision_no"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["design_file", "revision_no"],
+                name="uq_design_file_revision_no",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.design_file} - Revision {self.revision_no}"
+
+
+class ColorDefinition(TimeStampedModel):
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
+    code = models.PositiveSmallIntegerField(unique=True, null=False, blank=False)
+    hex_value = models.CharField(max_length=7, null=False, blank=False)
+    name = models.CharField(max_length=100, null=False, blank=False)
+    default_order = models.PositiveSmallIntegerField(default=0, null=False, blank=False)
+    is_system = models.BooleanField(null=False, default=True)
+
+    class Meta:
+        db_table = "color_definition"
+        ordering = ["default_order", "code"]
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+
+class UserColorPreference(TimeStampedModel):
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
+    user = models.ForeignKey(
+        User,
+        related_name="color_preferences",
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+    )
+    color_definition = models.ForeignKey(
+        ColorDefinition,
+        null=True,
+        blank=True,
+        related_name="user_preferences",
+        on_delete=models.CASCADE,
+    )
+    custom_hex = models.CharField(max_length=7, null=False, blank=True, default="")
+    custom_name = models.CharField(max_length=100, null=False, blank=True, default="")
+    display_order = models.PositiveSmallIntegerField(default=0, null=False, blank=False)
+
+    class Meta:
+        db_table = "user_color_preference"
+        ordering = ["display_order", "created"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "color_definition"],
+                name="uq_user_color_definition",
+                condition=models.Q(color_definition__isnull=False),
+            ),
+        ]
+
+    def __str__(self):
+        label = self.custom_name or (self.color_definition.name if self.color_definition else "")
+        return f"{self.user} - {label}"
+
+
 class Notification(TimeStampedModel):
     user = models.ForeignKey(
         User,

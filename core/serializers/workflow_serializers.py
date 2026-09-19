@@ -1,12 +1,14 @@
 from django.db import transaction
 from rest_framework import serializers
 
-from core.constant import INTEGER_FIELD_MAX_VALUE, POSITIVE_SMALL_INTEGER_MAX_VALUE
+from core.constant import INTEGER_FIELD_MAX_VALUE, POSITIVE_SMALL_INTEGER_MAX_VALUE, STEP_SETTINGS_POLICY
 from core.models import TemplateStep, WorkflowStepDefinition, WorkflowTemplate
 from core.serializers.fields import BoundedPrimaryKeyRelatedField, coerce_optional_string
 
 
 class WorkflowStepDefinitionSerializer(serializers.ModelSerializer):
+    settings_policy = serializers.SerializerMethodField()
+
     class Meta:
         model = WorkflowStepDefinition
         fields = [
@@ -18,8 +20,12 @@ class WorkflowStepDefinitionSerializer(serializers.ModelSerializer):
             "version",
             "is_active",
             "settings_schema_key",
+            "settings_policy",
         ]
         read_only_fields = fields
+
+    def get_settings_policy(self, obj):
+        return STEP_SETTINGS_POLICY.get(obj.code, {"has_settings": False})
 
 
 class TemplateStepSerializer(serializers.ModelSerializer):

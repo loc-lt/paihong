@@ -283,29 +283,27 @@ def extract_first_error_message(errors):
     """
     Extract the first error message from nested serializer errors structure
     """
+    if errors is None:
+        return None
+    if hasattr(errors, "detail"):
+        return extract_first_error_message(errors.detail)
     if isinstance(errors, dict):
-        for key, value in errors.items():
-            if isinstance(value, dict):
-                result = extract_first_error_message(value)
-                if result:
-                    return result
-            elif isinstance(value, list) and value:
-                if isinstance(value[0], str):
-                    return value[0]
-                else:
-                    result = extract_first_error_message(value[0])
-                    if result:
-                        return result
+        for value in errors.values():
+            result = extract_first_error_message(value)
+            if result:
+                return result
     elif isinstance(errors, list) and errors:
-        if isinstance(errors[0], str):
-            return errors[0]
-        else:
-            return extract_first_error_message(errors[0])
+        return extract_first_error_message(errors[0])
+    elif isinstance(errors, str) and errors:
+        return errors
+    if not isinstance(errors, (dict, list)):
+        text = str(errors)
+        return text if text else None
     return None
 
 
 def global_response_errors(errors):
-    error_message = extract_first_error_message(errors)
+    error_message = extract_first_error_message(errors) or "Invalid request!"
     return Response({
         "status": False,
         "message": error_message

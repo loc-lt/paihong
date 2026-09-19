@@ -15,7 +15,11 @@ class Command(BaseCommand):
         schema_keys = {
             "PICK_UPPER": "PICK_UPPER",
             "FIX_LINES_BY_ANCHOR": "FIX_LINES_BY_ANCHOR",
+            "CHECK_COLORS": "CHECK_COLORS",
             "CANVAS_FRAME_MEASURE": "CANVAS_FRAME_MEASURE",
+            "ENTER_SPECS": "ENTER_SPECS",
+            "BUILD_GRID": "BUILD_GRID",
+            "START_DESIGNING": "START_DESIGNING",
         }
 
         for sequence, code, name in WORKFLOW_STEP_SEED:

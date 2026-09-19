@@ -4,9 +4,12 @@ from core.constant import (
     BOOTSTRAP_ARTIFACT_ROLES,
     BOOTSTRAP_DONE_STEP_CODES,
     BOOTSTRAP_STEP_SETTINGS,
+    STEP_SETTINGS_SOURCE_BOOTSTRAP,
     RevisionTypeEnum,
     StepStatusEnum,
 )
+from core.services.pick_upper_candidates import build_bootstrap_pick_upper_settings
+from core.services.step_settings import wrap_settings
 from core.models import Part, PartStep, TemplateStep, WorkItem, WorkflowTemplate
 
 
@@ -111,15 +114,21 @@ def bootstrap_completed_part_steps(
                 completed.append(part_step)
             continue
 
+        settings = BOOTSTRAP_STEP_SETTINGS.get(code, {})
+        if code == "PICK_UPPER":
+            settings = build_bootstrap_pick_upper_settings(part)
+        wrapped_settings = wrap_settings(settings, source=STEP_SETTINGS_SOURCE_BOOTSTRAP)
+
         create_step_revision(
             part_step=part_step,
             revision_type=RevisionTypeEnum.OFFICIAL.value,
-            settings=BOOTSTRAP_STEP_SETTINGS.get(code, {}),
+            settings=wrapped_settings,
             artifacts=_bootstrap_artifacts(part, code),
             user=user,
             note=f"Auto-completed during work item processing ({code}).",
             mark_step_in_progress=True,
             mark_step_done=True,
+            settings_source=STEP_SETTINGS_SOURCE_BOOTSTRAP,
         )
         part_step.refresh_from_db()
         completed.append(part_step)

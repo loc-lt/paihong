@@ -12,6 +12,8 @@ from core.models import PartStep, RevisionArtifact, StepRevision
 from core.serializers.fields import coerce_optional_string
 from core.serializers.file_serializers import FileObjectSerializer
 from core.serializers.workflow_serializers import WorkflowStepDefinitionSerializer
+from core.services.file_storage import get_file_url
+from core.services.step_settings import unwrap_settings
 
 
 class StepRevisionSummarySerializer(serializers.ModelSerializer):
@@ -47,8 +49,26 @@ class RevisionArtifactSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class StepRevisionSummaryWithFileUrlsSerializer(StepRevisionSummarySerializer):
+    file_urls = serializers.SerializerMethodField()
+
+    class Meta(StepRevisionSummarySerializer.Meta):
+        fields = [*StepRevisionSummarySerializer.Meta.fields, "file_urls"]
+
+    def get_file_urls(self, obj):
+        if not obj:
+            return []
+        urls = []
+        for artifact in obj.artifacts.all():
+            file_object = artifact.file
+            if file_object:
+                urls.append(get_file_url(file_object.storage_key, file_object.storage_backend))
+        return urls
+
+
 class StepRevisionDetailSerializer(serializers.ModelSerializer):
     artifacts = RevisionArtifactSerializer(many=True, read_only=True)
+    settings_meta = serializers.SerializerMethodField()
 
     class Meta:
         model = StepRevision
@@ -59,6 +79,7 @@ class StepRevisionDetailSerializer(serializers.ModelSerializer):
             "revision_type",
             "parent_revision",
             "settings",
+            "settings_meta",
             "settings_schema_version",
             "app_version",
             "settings_hash",
@@ -68,6 +89,18 @@ class StepRevisionDetailSerializer(serializers.ModelSerializer):
             "created",
         ]
         read_only_fields = fields
+
+    def get_settings_meta(self, obj):
+        _data, meta = unwrap_settings(obj.settings)
+        return meta
+
+    def to_representation(self, instance):
+        if instance is None:
+            return None
+        data = super().to_representation(instance)
+        settings_data, _meta = unwrap_settings(instance.settings or {})
+        data["settings"] = settings_data or {}
+        return data
 
 
 class PartStepSerializer(serializers.ModelSerializer):
@@ -98,10 +131,51 @@ class PartStepDetailSerializer(PartStepSerializer):
     official_revision = StepRevisionDetailSerializer(read_only=True)
 
 
+class PartStepWithRevisionFilesSerializer(PartStepSerializer):
+    latest_revision = StepRevisionSummaryWithFileUrlsSerializer(read_only=True)
+    official_revision = StepRevisionSummaryWithFileUrlsSerializer(read_only=True)
+
+
 class PartStepsListSerializer(serializers.Serializer):
-    steps = PartStepSerializer(many=True, read_only=True)
+    steps = PartStepWithRevisionFilesSerializer(many=True, read_only=True)
     total_steps = serializers.IntegerField(read_only=True)
     completed_steps = serializers.IntegerField(read_only=True)
+
+
+class FlexibleSettingsField(serializers.Field):
+    """Accept settings from JSON body or multipart form (including empty values)."""
+
+    default_error_messages = {
+        "invalid": "Settings must be valid JSON!",
+    }
+
+    def to_internal_value(self, data):
+        if data is None or data == "":
+            return {}
+        if isinstance(data, dict):
+            return data
+        if isinstance(data, str):
+            stripped = data.strip()
+            if stripped in ("", "null", "undefined"):
+                return {}
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError as exc:
+                raise serializers.ValidationError(self.error_messages["invalid"]) from exc
+            if parsed is None:
+                return {}
+            if not isinstance(parsed, dict):
+                raise serializers.ValidationError(self.error_messages["invalid"])
+            return parsed
+        raise serializers.ValidationError(self.error_messages["invalid"])
+
+    def to_representation(self, value):
+        if not value:
+            return {}
+        if isinstance(value, dict):
+            data, _meta = unwrap_settings(value)
+            return data
+        return value
 
 
 def validate_revision_upload(uploaded_file) -> None:
@@ -116,14 +190,7 @@ def validate_revision_upload(uploaded_file) -> None:
 
 
 class SaveStepRevisionSerializer(serializers.Serializer):
-    settings = serializers.JSONField(
-        required=False,
-        allow_null=True,
-        error_messages={
-            "invalid": "Settings must be valid JSON!",
-            "null": "Settings must be valid JSON!",
-        },
-    )
+    settings = FlexibleSettingsField(required=False, default=dict)
     files = serializers.ListField(
         child=serializers.FileField(
             error_messages={
@@ -186,20 +253,6 @@ class SaveStepRevisionSerializer(serializers.Serializer):
         },
     )
 
-    def _parse_settings(self, settings):
-        if settings in (None, ""):
-            return {}
-        if isinstance(settings, str):
-            try:
-                return json.loads(settings)
-            except json.JSONDecodeError as exc:
-                raise serializers.ValidationError(
-                    {"settings": "Settings must be valid JSON!"}
-                ) from exc
-        if isinstance(settings, dict):
-            return settings
-        raise serializers.ValidationError({"settings": "Settings must be valid JSON!"})
-
     def _collect_uploaded_files(self, attrs):
         request = self.context.get("request")
         request_files = []
@@ -225,7 +278,7 @@ class SaveStepRevisionSerializer(serializers.Serializer):
         for uploaded in files:
             validate_revision_upload(uploaded)
         attrs["files"] = files
-        attrs["settings"] = self._parse_settings(attrs.get("settings"))
+        attrs["settings"] = attrs.get("settings") or {}
         return attrs
 
     def _build_artifacts(self):
@@ -241,9 +294,9 @@ class SaveStepRevisionSerializer(serializers.Serializer):
         ]
 
     def create_revision(self, *, part_step, revision_type, mark_step_done=False):
-        from core.services.step_revision import create_step_revision
+        from core.services.step_revision import StepRevisionResult, create_step_revision
 
-        return create_step_revision(
+        result = create_step_revision(
             part_step=part_step,
             revision_type=revision_type,
             settings=self.validated_data.get("settings") or {},
@@ -258,6 +311,9 @@ class SaveStepRevisionSerializer(serializers.Serializer):
             or 1,
             mark_step_done=mark_step_done,
         )
+        if isinstance(result, StepRevisionResult):
+            return result
+        return StepRevisionResult(revision=result, next_step_settings=None)
 
 
 CreateRevisionSerializer = SaveStepRevisionSerializer

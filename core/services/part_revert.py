@@ -2,6 +2,7 @@ from django.db import transaction
 
 from core.constant import StepStatusEnum
 from core.models import Part, PartStep, StepRevision
+from core.services.design_workspace import delete_design_workspace_for_part
 
 
 @transaction.atomic
@@ -21,6 +22,7 @@ def clear_steps_after(*, part: Part, after_sequence: int, user=None) -> dict:
 
     cleared_steps = []
     deleted_revisions = 0
+    deleted_workspaces = delete_design_workspace_for_part(part, user=user)
 
     for part_step in part_steps_to_clear:
         revision_ids = list(part_step.revisions.values_list("id", flat=True))
@@ -64,4 +66,5 @@ def clear_steps_after(*, part: Part, after_sequence: int, user=None) -> dict:
     return {
         "cleared_steps": cleared_steps,
         "deleted_revisions": deleted_revisions,
+        "deleted_workspaces": deleted_workspaces,
     }

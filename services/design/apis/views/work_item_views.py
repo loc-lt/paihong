@@ -1,3 +1,5 @@
+from urllib.parse import unquote
+
 from django.db.models import Count, F, Prefetch, Q
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
@@ -18,6 +20,7 @@ from core.serializers.work_item_process_serializers import (
 from core.serializers.work_item_serializers import (
     UpdateWorkItemSerializer,
     WorkItemDetailSerializer,
+    WorkItemItemCodeAvailabilitySerializer,
     WorkItemSerializer,
 )
 from core.services.work_item_process import annotate_work_item_parts_progress
@@ -26,6 +29,7 @@ from core.utils import get_instance, global_response_errors
 from ..documents.work_item_documents import (
     create_work_item_document,
     delete_work_item_document,
+    get_item_code_availability_document,
     get_source_documents_document,
     get_work_item_document,
     get_work_item_parts_document,
@@ -72,6 +76,25 @@ def _work_item_detail_queryset():
 
 class WorkItemViewSet(viewsets.ViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    @extend_schema(**get_item_code_availability_document)
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path=r"item_codes/(?P<item_code>[^/.]+)/availability",
+    )
+    def item_code_availability(self, request, item_code=None):
+        code = unquote(item_code or "").strip()
+        if not code:
+            return global_response_errors({"item_code": "Item code is required!"})
+        taken = WorkItem.objects.filter(item_code__iexact=code).exists()
+        payload = WorkItemItemCodeAvailabilitySerializer(
+            {"item_code": code, "available": not taken}
+        ).data
+        return success_response(
+            payload,
+            "Item code availability retrieved successfully!",
+        )
 
     @extend_schema(**get_work_items_document)
     def list(self, request):

@@ -1,3 +1,4 @@
+from .color_views import ColorViewSet, SystemColorViewSet
 from .part_views import PartViewSet, SourceDocumentPartViewSet
 from .source_document_views import SourceDocumentViewSet
 from .work_item_views import WorkItemViewSet
@@ -10,4 +11,6 @@ __all__ = [
     "SourceDocumentPartViewSet",
     "WorkflowTemplateViewSet",
     "WorkflowStepDefinitionViewSet",
+    "ColorViewSet",
+    "SystemColorViewSet",
 ]

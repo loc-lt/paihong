@@ -11,6 +11,7 @@ from core.services.part_workflow import (
     ensure_work_item_template,
     initialize_part_steps,
 )
+from core.services.pick_upper_candidates import build_pick_upper_candidates
 from core.services.source_document_converter import FileToSvgConverter
 
 
@@ -51,19 +52,20 @@ def detect_parts_from_source_document(source_document, user=None) -> list[dict]:
             created_by=user,
         )
         name = f"{base_name} - Part {index}" if multi_part else base_name
+        detected_metadata = {
+            "source": "file_converter",
+            "source_document_id": str(source_document.id),
+            "page_index": index,
+            "total_pages": len(list_svg),
+            "original_filename": filename,
+        }
         parts_data.append(
             {
                 "sequence": index,
                 "name": name,
                 "preview_file": preview_file,
                 "source_page": index if extension in (".pdf", ".ai") else None,
-                "detected_metadata": {
-                    "source": "file_converter",
-                    "source_document_id": str(source_document.id),
-                    "page_index": index,
-                    "total_pages": len(list_svg),
-                    "original_filename": filename,
-                },
+                "detected_metadata": detected_metadata,
             }
         )
     return parts_data
@@ -83,6 +85,7 @@ def create_parts_from_detection(
         sequence = part_data.get("sequence", index)
         preview_file = part_data.get("preview_file")
 
+        detected_metadata = dict(part_data.get("detected_metadata") or {})
         part = Part.objects.create(
             source_document=source_document,
             sequence=sequence,
@@ -91,10 +94,15 @@ def create_parts_from_detection(
             source_page=part_data.get("source_page"),
             source_bbox=part_data.get("source_bbox") or {},
             preview_file=preview_file,
-            detected_metadata=part_data.get("detected_metadata") or {},
+            detected_metadata=detected_metadata,
             created_by=user,
             updated_by=user,
         )
+        candidates = build_pick_upper_candidates(part=part)
+        if candidates:
+            detected_metadata["pick_upper_candidates"] = candidates
+            part.detected_metadata = detected_metadata
+            part.save(update_fields=["detected_metadata", "modified"])
         initialize_part_steps(part, user=user)
         if bootstrap_steps:
             bootstrap_completed_part_steps(part, user=user)
