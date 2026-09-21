@@ -35,7 +35,8 @@ create_work_item_document = {
     "description": (
         "Create a work item, upload one or more source files, run AI part detection "
         "(stub until AI service is connected), and initialize parts with "
-        "RECEIVE_FILES and PICK_UPPER marked as done. "
+        "RECEIVE_FILES marked as done (step 1 only). "
+        "PICK_UPPER remains for the user to complete manually. "
         "Use multipart/form-data with fields: item_code (unique), name, status, "
         "workflow_template_id, and files[] (multiple files, same field name). "
         "Allowed source extensions: PDF, AI, DXF, DWG (max 50 MB each)."

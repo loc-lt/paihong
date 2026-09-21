@@ -109,8 +109,8 @@ Tất cả enum lưu **integer** trong DB/API (không phải string).
 
 **Hằng số nghiệp vụ** (`core/constant.py`):
 
-- `BOOTSTRAP_DONE_STEP_CODES = ("RECEIVE_FILES", "PICK_UPPER")` — auto-complete khi tạo Part.
-- `WORKFLOW_ACTIVE_START_STEP_CODE = "ROTATE_STRIP_TEXT"` — bước 3, bước đầu user làm thủ công.
+- `BOOTSTRAP_DONE_STEP_CODES = ("RECEIVE_FILES")` — auto-complete bước 1 khi tạo Part.
+- `WORKFLOW_ACTIVE_START_STEP_CODE = "PICK_UPPER"` — bước 2, bước đầu user làm thủ công.
 - `AUTOSAVE_KEEP_LATEST = 12`
 - `ALLOWED_SOURCE_EXTENSIONS = ["pdf", "ai", "dxf"]` (max 50 MB/file)
 - `ALLOWED_ARTIFACT_EXTENSIONS = ["png","jpg","jpeg","json","svg","dxf","pdf"]`
@@ -299,21 +299,22 @@ Grid snapshot references `color_id`, not duplicated hex.
 2. `FileToSvgConverter` convert PDF/AI/DXF → danh sách SVG string.
 3. **Mỗi SVG = 1 Part**, lưu SVG làm `preview_file`.
 4. Khởi tạo PartStep từ template.
-5. Bootstrap bước 1–2 (xem §6.3).
+5. Bootstrap bước 1 (xem §6.3).
 6. Lỗi → `SourceDocument.status = FAILED`, raise ValidationError.
 
 Dependencies design service: `pymupdf`, `ezdxf`, `matplotlib`.
 
-### 6.3 Bootstrap steps 1–2
+### 6.3 Bootstrap step 1
 
-`bootstrap_completed_part_steps()` tự **official complete** hai bước đầu:
+`bootstrap_completed_part_steps()` tự **official complete** bước đầu tiên:
 
 | Step | Settings | Artifact role |
 |------|----------|---------------|
 | RECEIVE_FILES | `{}` | `SOURCE_FILE` → file gốc SourceDocument |
-| PICK_UPPER | `{ selected_candidate_index, rotation, candidates[] }` | `PREVIEW_IMAGE` → `part.preview_file` |
 
-User bắt đầu làm từ bước **3** (`ROTATE_STRIP_TEXT`) qua revision service.
+`PICK_UPPER` **không** auto-complete — user chọn upper, rotation và complete thủ công. Candidates được gợi ý sẵn trong `part.detected_metadata.pick_upper_candidates`.
+
+User bắt đầu làm từ bước **2** (`PICK_UPPER`) qua revision service.
 
 ### 6.4 Step revision — autosave / save / complete
 
@@ -600,7 +601,7 @@ Tóm tắt các thay đổi đã implement (sync với source hiện tại):
 
 1. **Process WorkItem** — một endpoint POST thay cho upload/complete tách rời.
 2. **FileToSvgConverter** — detect Part local (PDF/AI/DXF → SVG); mỗi SVG = 1 Part.
-3. **Bootstrap** RECEIVE_FILES + PICK_UPPER auto-DONE khi tạo Part.
+3. **Bootstrap** RECEIVE_FILES auto-DONE khi tạo Part; PICK_UPPER do user complete.
 4. **Complete step** gộp logic “revert”: xóa revision các step sau; **complete lại step đã DONE được**.
 5. **Không có API revert** riêng.
 6. **`item_code` unique** — DB + serializer validation.
