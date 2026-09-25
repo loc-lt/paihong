@@ -704,7 +704,7 @@ class DesignFileRevision(TimeStampedModel):
         ]
 
     def __str__(self):
-        return f"{self.design_file} - Revision {self.revision_no}"
+        return f"DesignFileRevision {self.revision_no} ({self.design_file_id})"
 
 
 class ColorDefinition(TimeStampedModel):
