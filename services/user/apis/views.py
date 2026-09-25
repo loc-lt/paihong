@@ -228,9 +228,8 @@ class UserViewSet(viewsets.ViewSet):
     def restore(self, request, pk=None):
         self._require_admin(request)
         user = get_deleted_instance(User, pk)
-        user.deleted_at = None
-        user.is_deleted = False
-        user.save(update_fields=["deleted_at", "is_deleted", "modified"])
+        user.restore(strict=False)
+        user.refresh_from_db()
         return Response(
             {
                 "status": True,
