@@ -1,5 +1,6 @@
 from drf_spectacular.utils import OpenApiResponse
 
+from core.openapi_params import ITEM_CODE_PATH_PARAM, UUID_PATH_PARAM
 from core.serializers.part_serializers import WorkItemPartsListSerializer
 from core.serializers.work_item_process_serializers import (
     ProcessWorkItemResultSerializer,
@@ -18,6 +19,7 @@ get_item_code_availability_document = {
         "Returns whether the item code is available (not yet used). "
         "Match is case-insensitive."
     ),
+    "parameters": [ITEM_CODE_PATH_PARAM],
     "responses": {200: WorkItemItemCodeAvailabilitySerializer},
 }
 
@@ -51,22 +53,26 @@ get_work_item_document = {
         "Returns work item with nested source_documents and parts. "
         "Each part includes total_steps and completed_steps (status = done)."
     ),
+    "parameters": [UUID_PATH_PARAM],
     "responses": {200: WorkItemDetailSerializer},
 }
 
 update_work_item_document = {
     "summary": "Update work item.",
+    "parameters": [UUID_PATH_PARAM],
     "request": UpdateWorkItemSerializer,
     "responses": {200: WorkItemSerializer},
 }
 
 delete_work_item_document = {
     "summary": "Delete work item.",
+    "parameters": [UUID_PATH_PARAM],
     "responses": {200: OpenApiResponse(description="Deleted")},
 }
 
 get_source_documents_document = {
     "summary": "List source documents.",
+    "parameters": [UUID_PATH_PARAM],
     "responses": {200: OpenApiResponse(description="Source documents list")},
 }
 
@@ -76,5 +82,6 @@ get_work_item_parts_document = {
         "Returns all parts without pagination, plus total_parts and "
         "completed_parts (a part is completed when every step is done)."
     ),
+    "parameters": [UUID_PATH_PARAM],
     "responses": {200: WorkItemPartsListSerializer},
 }
