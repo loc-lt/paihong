@@ -1,10 +1,16 @@
 from rest_framework import serializers
 
-from core.constant import PartStatusEnum
+from core.constant import (
+    ALLOWED_ARTIFACT_EXTENSIONS,
+    MAX_IMAGE_SIZE,
+    PartStatusEnum,
+)
 from core.models import Part
 from core.serializers.fields import coerce_optional_string
 from core.serializers.file_serializers import FileObjectSerializer
+from core.serializers.revision_serializers import validate_revision_upload
 from core.serializers.source_document_serializers import SourceDocumentSerializer
+from core.services.file_storage import delete_file_object, store_uploaded_file
 
 
 class PartSerializer(serializers.ModelSerializer):
@@ -71,10 +77,16 @@ class UpdatePartSerializer(serializers.ModelSerializer):
             "null": "Invalid part status!",
         },
     )
+    preview = serializers.FileField(
+        required=False,
+        allow_null=True,
+        write_only=True,
+        help_text="Replace part preview/thumbnail image (PNG, JPG, JPEG, SVG).",
+    )
 
     class Meta:
         model = Part
-        fields = ["name", "status"]
+        fields = ["name", "status", "preview"]
 
     def __init__(self, *args, **kwargs):
         kwargs["partial"] = True
@@ -83,10 +95,36 @@ class UpdatePartSerializer(serializers.ModelSerializer):
     def validate_name(self, value):
         return coerce_optional_string(value)
 
+    def validate_preview(self, value):
+        if value is None:
+            return None
+        if value.size > MAX_IMAGE_SIZE:
+            raise serializers.ValidationError("Preview image must be smaller than 50 MB!")
+        validate_revision_upload(value)
+        extension = (value.name or "").rsplit(".", 1)[-1].lower()
+        if extension not in ALLOWED_ARTIFACT_EXTENSIONS:
+            allowed = ", ".join(ext.upper() for ext in ALLOWED_ARTIFACT_EXTENSIONS)
+            raise serializers.ValidationError(f"Preview must be one of: {allowed}!")
+        return value
+
     def update(self, instance, validated_data):
         user = self.context["request"].user
+        preview = validated_data.pop("preview", serializers.empty)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        if preview is not serializers.empty:
+            if preview is None:
+                if instance.preview_file_id:
+                    old = instance.preview_file
+                    delete_file_object(old)
+                    old.delete()
+                instance.preview_file = None
+            else:
+                if instance.preview_file_id:
+                    old = instance.preview_file
+                    delete_file_object(old)
+                    old.delete()
+                instance.preview_file = store_uploaded_file(preview, created_by=user)
         instance.updated_by = user
         instance.save()
         return instance

@@ -154,6 +154,13 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "SCHEMA_PATH_PREFIX": "/api/v1",
     "COMPONENT_SPLIT_REQUEST": True,
+    "ENUM_NAME_OVERRIDES": {
+        "WorkItemStatusEnum": "core.constant.WorkItemStatusEnum",
+        "PartStatusEnum": "core.constant.PartStatusEnum",
+        "StepStatusEnum": "core.constant.StepStatusEnum",
+        "SourceDocumentStatusEnum": "core.constant.SourceDocumentStatusEnum",
+        "UserStatusEnum": "core.constant.UserStatusEnum",
+    },
 }
 
 CELERY_BEAT_SCHEDULE = {}

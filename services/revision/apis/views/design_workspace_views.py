@@ -1,8 +1,9 @@
+from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
 
-from core.constant import RevisionTypeEnum
+from core.constant import GRID_SNAPSHOT_SCHEMA_VERSION, GRID_TILE_SIZE, RevisionTypeEnum
 from core.exceptions import RevisionConflict
 from core.models import DesignFile, DesignFileRevision, Part, PartStep, WorkflowStepDefinition
 from core.permissions import require_design
@@ -20,6 +21,16 @@ from core.serializers.design_serializers import (
 from core.services.design_grid.snapshot import read_tiles_from_snapshot
 from core.services.design_workspace import get_or_create_workspace
 from core.utils import get_instance, global_response_errors
+
+from ..documents.design_documents import (
+    design_file_autosave_document,
+    design_file_complete_document,
+    design_file_save_document,
+    get_design_file_tiles_document,
+    get_design_workspace_document,
+    patch_design_file_tiles_document,
+    restore_design_file_revision_document,
+)
 
 
 class DesignWorkspaceViewSet(viewsets.ViewSet):
@@ -42,6 +53,7 @@ class DesignWorkspaceViewSet(viewsets.ViewSet):
             raise NotFound("Design file not found!")
         return design_file
 
+    @extend_schema(**get_design_workspace_document)
     @action(
         detail=True,
         methods=["get"],
@@ -53,7 +65,9 @@ class DesignWorkspaceViewSet(viewsets.ViewSet):
         workspace = get_or_create_workspace(part_step, user=request.user)
         workspace = (
             type(workspace)
-            .objects.select_related("part_step")
+            .objects.select_related(
+                "part_step__part__source_document__work_item",
+            )
             .prefetch_related("files__latest_revision", "files__official_revision")
             .get(pk=workspace.pk)
         )
@@ -101,6 +115,7 @@ class DesignWorkspaceViewSet(viewsets.ViewSet):
             "Design file revisions retrieved successfully!",
         )
 
+    @extend_schema(**design_file_autosave_document)
     @action(
         detail=True,
         methods=["post"],
@@ -115,6 +130,7 @@ class DesignWorkspaceViewSet(viewsets.ViewSet):
             "Design file autosaved successfully!",
         )
 
+    @extend_schema(**design_file_save_document)
     @action(
         detail=True,
         methods=["post"],
@@ -129,6 +145,7 @@ class DesignWorkspaceViewSet(viewsets.ViewSet):
             "Design file saved successfully!",
         )
 
+    @extend_schema(**design_file_complete_document)
     @action(
         detail=True,
         methods=["post"],
@@ -198,12 +215,36 @@ class DesignWorkspaceViewSet(viewsets.ViewSet):
 
 
 class DesignFileRevisionViewSet(viewsets.ViewSet):
-    @action(detail=True, methods=["get"], url_path="tiles")
+    serializer_class = DesignFileRevisionDetailSerializer
+
+    @extend_schema(methods=["GET"], **get_design_file_tiles_document)
+    @extend_schema(methods=["PATCH"], **patch_design_file_tiles_document)
+    @action(detail=True, methods=["get", "patch"], url_path="tiles")
     def tiles(self, request, pk=None):
         revision = get_instance(DesignFileRevision, pk)
         revision = DesignFileRevision.objects.select_related("snapshot_file").get(
             pk=revision.pk
         )
+        if request.method == "PATCH":
+            require_design(request.user)
+            from core.services.design_files import is_grid_design_file
+
+            if not is_grid_design_file(revision.design_file.file_type):
+                return global_response_errors(
+                    {"file_type": "Grid tiles API is only available for S1!"}
+                )
+            serializer = DesignFileTilesPatchSerializer(
+                data=request.data,
+                context={"request": request},
+            )
+            if serializer.is_valid():
+                revision = serializer.apply(revision=revision)
+                return success_response(
+                    DesignFileRevisionDetailSerializer(revision).data,
+                    "Tiles updated successfully!",
+                )
+            return global_response_errors(serializer.errors)
+
         query = DesignFileTilesQuerySerializer(data=request.query_params)
         if not query.is_valid():
             return global_response_errors(query.errors)
@@ -211,6 +252,8 @@ class DesignFileRevisionViewSet(viewsets.ViewSet):
         y0 = query.validated_data["y0"]
         x1 = query.validated_data.get("x1") or revision.grid_width
         y1 = query.validated_data.get("y1") or revision.grid_height
+        from core.services.design_grid.tile_codec import normalize_tile_update_bytes
+
         tiles = read_tiles_from_snapshot(
             snapshot_file=revision.snapshot_file,
             x0=x0,
@@ -218,34 +261,28 @@ class DesignFileRevisionViewSet(viewsets.ViewSet):
             x1=x1,
             y1=y1,
         )
+        normalized_tiles = {}
+        for key, hex_value in tiles.items():
+            try:
+                normalized_tiles[key] = normalize_tile_update_bytes(
+                    bytes.fromhex(hex_value)
+                ).hex()
+            except (ValueError, TypeError):
+                normalized_tiles[key] = hex_value
         return success_response(
             {
                 "revision_id": str(revision.id),
+                "schema_version": GRID_SNAPSHOT_SCHEMA_VERSION,
+                "tile_size": GRID_TILE_SIZE,
+                "grid_width": revision.grid_width,
+                "grid_height": revision.grid_height,
                 "viewport": {"x0": x0, "y0": y0, "x1": x1, "y1": y1},
-                "tiles": tiles,
+                "tiles": normalized_tiles,
             },
             "Tiles retrieved successfully!",
         )
 
-    @action(detail=True, methods=["patch"], url_path="tiles")
-    def patch_tiles(self, request, pk=None):
-        require_design(request.user)
-        revision = get_instance(DesignFileRevision, pk)
-        revision = DesignFileRevision.objects.select_related("snapshot_file").get(
-            pk=revision.pk
-        )
-        serializer = DesignFileTilesPatchSerializer(
-            data=request.data,
-            context={"request": request},
-        )
-        if serializer.is_valid():
-            revision = serializer.apply(revision=revision)
-            return success_response(
-                DesignFileRevisionDetailSerializer(revision).data,
-                "Tiles updated successfully!",
-            )
-        return global_response_errors(serializer.errors)
-
+    @extend_schema(**restore_design_file_revision_document)
     @action(detail=True, methods=["post"], url_path="restore")
     def restore(self, request, pk=None):
         require_design(request.user)

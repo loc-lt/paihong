@@ -22,7 +22,10 @@ def clear_steps_after(*, part: Part, after_sequence: int, user=None) -> dict:
 
     cleared_steps = []
     deleted_revisions = 0
-    deleted_workspaces = delete_design_workspace_for_part(part, user=user)
+    part_steps_to_clear = list(part_steps_to_clear)
+    deleted_workspaces = 0
+    if any(part_step.step.code == "START_DESIGNING" for part_step in part_steps_to_clear):
+        deleted_workspaces = delete_design_workspace_for_part(part, user=user)
 
     for part_step in part_steps_to_clear:
         revision_ids = list(part_step.revisions.values_list("id", flat=True))

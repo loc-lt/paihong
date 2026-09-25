@@ -1,4 +1,5 @@
 from django.db import transaction
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from core.constant import INTEGER_FIELD_MAX_VALUE, POSITIVE_SMALL_INTEGER_MAX_VALUE, STEP_SETTINGS_POLICY
@@ -24,8 +25,13 @@ class WorkflowStepDefinitionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    @extend_schema_field(serializers.JSONField())
     def get_settings_policy(self, obj):
         return STEP_SETTINGS_POLICY.get(obj.code, {"has_settings": False})
+
+
+class SyncPartsResultSerializer(serializers.Serializer):
+    synced_parts = serializers.IntegerField()
 
 
 class TemplateStepSerializer(serializers.ModelSerializer):

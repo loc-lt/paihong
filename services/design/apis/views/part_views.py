@@ -1,5 +1,6 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 
 from core.filters import PartFilter
 from core.models import Part, SourceDocument
@@ -12,10 +13,16 @@ from core.serializers.part_serializers import (
 )
 from core.utils import get_instance, global_response_errors
 
-from ..documents.part_documents import get_part_document, update_part_document
+from ..documents.part_documents import (
+    get_part_document,
+    list_source_document_parts_document,
+    update_part_document,
+)
 
 
 class PartViewSet(viewsets.ViewSet):
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
     @extend_schema(**get_part_document)
     def retrieve(self, request, pk=None):
         part = get_instance(Part, pk)
@@ -45,6 +52,7 @@ class PartViewSet(viewsets.ViewSet):
 
 
 class SourceDocumentPartViewSet(viewsets.ViewSet):
+    @extend_schema(**list_source_document_parts_document)
     def list(self, request, source_id=None):
         source_document = get_instance(SourceDocument, source_id)
         queryset = PartFilter(

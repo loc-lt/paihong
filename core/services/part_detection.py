@@ -24,7 +24,9 @@ def detect_parts_from_source_document(source_document, user=None) -> list[dict]:
     filename = source_document.original_filename
 
     try:
-        list_svg, svg_full = FileToSvgConverter.process_file(file_bytes, filename)
+        list_svg, list_texts, svg_full = FileToSvgConverter.process_file(
+            file_bytes, filename
+        )
     except ValueError as exc:
         raise ValidationError({"file": str(exc)}) from exc
 
@@ -52,12 +54,16 @@ def detect_parts_from_source_document(source_document, user=None) -> list[dict]:
             created_by=user,
         )
         name = f"{base_name} - Part {index}" if multi_part else base_name
+        texts = (
+            list_texts[index - 1] if index - 1 < len(list_texts) else []
+        )
         detected_metadata = {
             "source": "file_converter",
             "source_document_id": str(source_document.id),
             "page_index": index,
             "total_pages": len(list_svg),
             "original_filename": filename,
+            "texts": texts,
         }
         parts_data.append(
             {

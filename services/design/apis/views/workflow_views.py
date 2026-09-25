@@ -30,6 +30,8 @@ from ..documents.workflow_documents import (
 
 
 class WorkflowTemplateViewSet(viewsets.ViewSet):
+    serializer_class = WorkflowTemplateSerializer
+
     @extend_schema(**get_workflow_templates_document)
     def list(self, request):
         require_admin(request.user)

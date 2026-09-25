@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from core.constant import WorkItemStatusEnum
@@ -36,6 +37,7 @@ class WorkItemSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    @extend_schema_field(serializers.ChoiceField(choices=WorkItemStatusEnum.choices))
     def get_status(self, obj):
         return resolve_work_item_status(obj)
 
@@ -57,6 +59,7 @@ class WorkItemDetailSerializer(WorkItemSerializer):
         ] + ["source_documents", "parts"]
         read_only_fields = fields
 
+    @extend_schema_field(PartWithStepsProgressSerializer(many=True))
     def get_parts(self, obj):
         parts = []
         for source_document in obj.source_documents.all():

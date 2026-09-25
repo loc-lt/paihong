@@ -41,7 +41,18 @@ def get_total_bounds(drawables: List[Any]) -> Tuple[float, float, float, float]:
     return (minx, miny, maxx, maxy) if minx != float('inf') else (0,0,0,0)
 
 
-def split_by_regions(root: ET.Element, regions: List[Polygon]) -> List[ET.Element]:
+def is_in_defs(el: ET.Element, par: Dict[ET.Element, ET.Element]) -> bool:
+    """Check if an element is inside a <defs> or <clipPath> block."""
+    curr = par.get(el)
+    while curr is not None:
+        tag = curr.tag.split("}")[-1]
+        if tag in ["defs", "clipPath"]:
+            return True
+        curr = par.get(curr)
+    return False
+
+
+def split_by_regions(root: ET.Element, regions: List[Polygon]) -> Tuple[List[ET.Element], List[List[str]]]:
     """
     Assigns elements to the closest region (or contained region) and splits the SVG.
     Handles assigning satellite elements (like disconnected text) to the nearest anchor.
@@ -54,6 +65,9 @@ def split_by_regions(root: ET.Element, regions: List[Polygon]) -> List[ET.Elemen
     drawables = []
     
     for el in root.iter():
+        if is_in_defs(el, par):
+            continue
+            
         tag = el.tag.split("}")[-1]
         m = full_matrix(el, par)
         
@@ -87,6 +101,22 @@ def split_by_regions(root: ET.Element, regions: List[Polygon]) -> List[ET.Elemen
             pts_t = [apply_affine_pt(p, m) for p in pts]
             geom = Polygon(pts_t)
             drawables.append((el, m, geom, None, "use", gid))
+            
+        elif tag == "text":
+            text_str = "".join(el.itertext()).strip()
+            if not text_str: continue
+            
+            # Simple bbox for text
+            x = float(el.get("x", 0))
+            y = float(el.get("y", 0))
+            font_size = float(el.get("font-size", 12))
+            w = len(text_str) * font_size * 0.6
+            h = font_size
+            
+            pts = [(x, y - h), (x+w, y - h), (x+w, y), (x, y)]
+            pts_t = [apply_affine_pt(p, m) for p in pts]
+            geom = Polygon(pts_t)
+            drawables.append((el, m, geom, text_str, "text", None))
 
     # Calculate overall bounding box to detect background frames
     root_bbox = get_total_bounds(drawables)
@@ -129,8 +159,9 @@ def split_by_regions(root: ET.Element, regions: List[Polygon]) -> List[ET.Elemen
         if best_i != -1:
             buckets[best_i].append(item)
 
-    # Reconstruct SVGs for each bucket
+    # Reconstruct SVGs and Texts for each bucket
     out_trees = []
+    out_texts = []
     
     for b in buckets:
         if not b:
@@ -190,5 +221,9 @@ def split_by_regions(root: ET.Element, regions: List[Polygon]) -> List[ET.Elemen
                 insert_target.append(copy.deepcopy(el))
                 
         out_trees.append(new_root)
+        
+        # Collect texts
+        texts = [item[3] for item in b if item[4] == "text"]
+        out_texts.append(texts)
 
-    return out_trees
+    return out_trees, out_texts

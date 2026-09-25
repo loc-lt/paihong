@@ -158,16 +158,18 @@ def create_step_revision(
         _cleanup_autosaves(part_step)
 
     if mark_step_done:
-        next_step_settings = run_step_complete_handler(
-            part_step=part_step,
-            revision=revision,
-            user=user,
-        )
         from core.services.part_revert import clear_steps_after
 
+        # Clear downstream steps before handlers that initialize later work
+        # (e.g. BUILD_GRID -> DesignWorkspace for START_DESIGNING).
         clear_steps_after(
             part=part_step.part,
             after_sequence=part_step.step.sequence,
+            user=user,
+        )
+        next_step_settings = run_step_complete_handler(
+            part_step=part_step,
+            revision=revision,
             user=user,
         )
         return StepRevisionResult(

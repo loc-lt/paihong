@@ -140,10 +140,16 @@ BOOTSTRAP_STEP_SETTINGS = {
     },
 }
 
-DESIGN_FILE_SEQUENCE = ("S1", "C", "H", "SIM", "P", "FC", "F", "KMO")
+from core.services.design_files import (  # noqa: E402
+    DESIGN_FILE_SEQUENCE,
+    DESIGN_FILE_SPECS,
+    GRID_DESIGN_FILE_TYPES,
+    build_design_file_display_name,
+    is_grid_design_file,
+)
 
-GRID_TILE_SIZE = 256
-GRID_SNAPSHOT_SCHEMA_VERSION = 1
+GRID_TILE_SIZE = 64
+GRID_SNAPSHOT_SCHEMA_VERSION = 2
 
 STEP_SETTINGS_SOURCE_MANUAL = "manual"
 STEP_SETTINGS_SOURCE_BOOTSTRAP = "bootstrap"
