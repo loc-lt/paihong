@@ -68,8 +68,9 @@ instance/
 # Scrapy stuff:
 .scrapy
 
-# Sphinx documentation
-docs/_build/
+# Local docs — never push (folder + all nested files/subfolders)
+/docs/
+/docs/**
 
 # PyBuilder
 .pybuilder/
