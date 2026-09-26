@@ -61,7 +61,7 @@ class BuildGridCompleteHandler:
         return {
             "step_code": "START_DESIGNING",
             "settings": merge_validated_data(
-                {"active_file_type": "S1", "progress": {}},
+                {"active_file_type": "S", "progress": {}},
                 source="grid_import",
                 from_step_code=self.step_code,
                 from_revision_id=str(revision.id),

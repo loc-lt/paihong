@@ -563,7 +563,7 @@ Default users (seeder): `admin`, `designer`, `developer` — password `Defaultpa
 | GET    | `/api/v1/system_colors/`                                           | User  | System palette only                                                                          |
 
 
-**Design file sequence:** `S → S1 → C → H → P → F → FC → KMO` (`DESIGN_FILE_SEQUENCE`). Tên file: `{item_code}_S.png`, `{item_code}_S1.png`, … `{item_code}.kmo`. **BUILD_GRID** tạo revision placeholder cho **S** (PNG trắng) và grid trống cho **S1**. Workspace cũ thiếu S được backfill khi `GET workspace`. **Không khóa file** — FE mở/xem/edit tab tự do. **Complete** phải đúng thứ tự: BE trả 400 nếu file trước chưa `progress=done` (vd. `"Complete S before S1!"`). Chỉ **S1** dùng grid PATCH/GET tiles; `layers[]` đổi `z_order` qua autosave/save.
+**Design file sequence:** `S → S1 → C → H → P → F → FC → KMO` (`DESIGN_FILE_SEQUENCE`). Tên file: `{item_code}_S.png`, `{item_code}_S1.png`, … `{item_code}.kmo`. **BUILD_GRID** chỉ tạo revision file **S** (PNG placeholder); grid snapshot lưu trong `workspace.settings.grid_snapshot_id`. Revision **S1** được tạo khi **complete file S** (hoặc backfill nếu S đã done). Workspace cũ thiếu S/S1 được backfill khi `GET workspace`. **Không khóa file** — FE mở/xem/edit tab tự do. **Complete** phải đúng thứ tự: BE trả 400 nếu file trước chưa `progress=done` (vd. `"Complete S before S1!"`). Chỉ **S1** dùng grid PATCH/GET tiles; `layers[]` đổi `z_order` qua autosave/save.
 
 Seed colors: `python manage.py seed_system_colors`.
 

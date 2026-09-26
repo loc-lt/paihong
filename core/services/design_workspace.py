@@ -114,13 +114,60 @@ def _ensure_s_design_file_revision(workspace: DesignWorkspace, user=None) -> Des
         user=user,
     )
 
+
+def _pending_grid_snapshot(workspace: DesignWorkspace) -> FileObject | None:
+    settings = workspace.settings or {}
+    snapshot_id = settings.get("grid_snapshot_id")
+    if not snapshot_id:
+        return None
+    return FileObject.objects.filter(pk=snapshot_id).first()
+
+
+def initialize_s1_design_file(*, workspace: DesignWorkspace, user=None) -> DesignFileRevision | None:
+    """Create S1 grid revision from BUILD_GRID snapshot (after S is ready or complete)."""
+    s1_file = workspace.files.filter(file_type="S1").first()
+    if not s1_file or s1_file.latest_revision_id:
+        return None
+
+    settings = workspace.settings or {}
+    grid = settings.get("grid") or {}
+    width = int(grid.get("width") or 0)
+    height = int(grid.get("height") or 0)
+    snapshot_file = _pending_grid_snapshot(workspace)
+    if not snapshot_file or width <= 0 or height <= 0:
+        return None
+
+    revision = DesignFileRevision.objects.create(
+        design_file=s1_file,
+        revision_no=1,
+        revision_type=RevisionTypeEnum.MANUAL.value,
+        layers=[],
+        grid_width=width,
+        grid_height=height,
+        snapshot_file=snapshot_file,
+        tile_manifest={},
+        created_by=user,
+    )
+    s1_file.latest_revision = revision
+    s1_file.updated_by = user
+    s1_file.save(update_fields=["latest_revision", "updated_by", "modified"])
+    return revision
+
+
+def _ensure_s1_design_file_revision(workspace: DesignWorkspace, user=None) -> DesignFileRevision | None:
+    """Backfill S1 when S is done but grid revision was deferred (new BUILD_GRID flow)."""
+    progress = dict((workspace.settings or {}).get("progress") or {})
+    if progress.get("S") != "done":
+        return None
+    return initialize_s1_design_file(workspace=workspace, user=user)
+
 @transaction.atomic
 def get_or_create_workspace(part_step: PartStep, user=None) -> DesignWorkspace:
     workspace, created = DesignWorkspace.objects.get_or_create(
         part_step=part_step,
         defaults={
             "settings": {
-                "active_file_type": "S1",
+                "active_file_type": "S",
                 "progress": {file_type: "not_started" for file_type in DESIGN_FILE_SEQUENCE},
             },
             "updated_by": user,
@@ -136,6 +183,7 @@ def get_or_create_workspace(part_step: PartStep, user=None) -> DesignWorkspace:
     else:
         _ensure_design_files(workspace, user=user)
     _ensure_s_design_file_revision(workspace, user=user)
+    _ensure_s1_design_file_revision(workspace, user=user)
     return workspace
 
 @transaction.atomic
@@ -158,28 +206,14 @@ def initialize_design_workspace(
         height=grid_height,
         user=user,
     )
-    revision = DesignFileRevision.objects.create(
-        design_file=s1_file,
-        revision_no=1,
-        revision_type=RevisionTypeEnum.OFFICIAL.value,
-        layers=[],
-        grid_width=grid_width,
-        grid_height=grid_height,
-        snapshot_file=snapshot_file,
-        tile_manifest={},
-        created_by=user,
-    )
-    s1_file.latest_revision = revision
-    s1_file.official_revision = revision
-    s1_file.updated_by = user
-    s1_file.save(update_fields=["latest_revision", "official_revision", "updated_by", "modified"])
 
     workspace.settings = {
-        "active_file_type": "S1",
+        "active_file_type": "S",
+        "grid": {"width": grid_width, "height": grid_height},
+        "grid_snapshot_id": str(snapshot_file.id),
         "progress": {file_type: "not_started" for file_type in DESIGN_FILE_SEQUENCE},
     }
     workspace.settings["progress"]["S"] = "in_progress"
-    workspace.settings["progress"]["S1"] = "in_progress"
     workspace.updated_by = user
     workspace.save(update_fields=["settings", "updated_by", "modified"])
     return workspace
@@ -223,7 +257,7 @@ def create_design_file_revision(
             {
                 "snapshot_file": (
                     f"Cannot create revision for {design_file.file_type} "
-                    "without a snapshot. Complete BUILD_GRID for S1 first."
+                    "without a snapshot. Complete BUILD_GRID and prior design files first."
                 )
             }
         )
@@ -294,10 +328,17 @@ def complete_design_file_revision(
     workspace = design_file.workspace
     progress = dict((workspace.settings or {}).get("progress") or {})
     progress[design_file.file_type] = "done"
-    workspace.settings = {
+    settings_update = {
         **(workspace.settings or {}),
         "progress": progress,
     }
+    if design_file.file_type == "S":
+        initialize_s1_design_file(workspace=workspace, user=user)
+        settings_update["active_file_type"] = "S1"
+        if progress.get("S1") == "not_started":
+            progress["S1"] = "in_progress"
+            settings_update["progress"] = progress
+    workspace.settings = settings_update
     workspace.updated_by = user
     workspace.save(update_fields=["settings", "updated_by", "modified"])
 
