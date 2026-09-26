@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from core.constant import RevisionTypeEnum, StepStatusEnum
@@ -28,21 +29,56 @@ def _delete_file_objects(file_object_ids: set) -> None:
         file_obj = FileObject.objects.filter(pk=file_id).first()
         if not file_obj:
             continue
+        still_referenced = DesignFileRevision.objects.filter(
+            Q(snapshot_file_id=file_id) | Q(preview_file_id=file_id)
+        ).exists()
+        if still_referenced:
+            continue
         delete_file_object(file_obj)
         file_obj.delete()
 
-def _clear_design_file_revisions(design_file: DesignFile) -> None:
+def _collect_revision_file_object_ids(revisions) -> set:
     file_object_ids: set = set()
-    for rev in design_file.revisions.all():
+    for rev in revisions:
         if rev.snapshot_file_id:
             file_object_ids.add(rev.snapshot_file_id)
         if rev.preview_file_id:
             file_object_ids.add(rev.preview_file_id)
+    return file_object_ids
+
+
+def _clear_design_file_revisions(design_file: DesignFile) -> None:
+    revisions = list(design_file.revisions.all())
+    file_object_ids = _collect_revision_file_object_ids(revisions)
     DesignFile.objects.filter(pk=design_file.pk).update(
         latest_revision=None,
         official_revision=None,
     )
     design_file.revisions.all().delete()
+    _delete_file_objects(file_object_ids)
+
+
+def _clear_design_workspace_revisions(workspace: DesignWorkspace) -> None:
+    """Drop all design file revisions and blob refs (shared snapshots safe)."""
+    file_object_ids: set = set()
+    settings = workspace.settings or {}
+    snapshot_id = settings.get("grid_snapshot_id")
+    if snapshot_id:
+        file_object_ids.add(snapshot_id)
+
+    design_files = list(workspace.files.prefetch_related("revisions"))
+    for design_file in design_files:
+        file_object_ids.update(
+            _collect_revision_file_object_ids(design_file.revisions.all())
+        )
+
+    for design_file in design_files:
+        DesignFile.objects.filter(pk=design_file.pk).update(
+            latest_revision=None,
+            official_revision=None,
+        )
+        design_file.revisions.all().delete()
+
     _delete_file_objects(file_object_ids)
 
 def _ensure_design_files(workspace: DesignWorkspace, user=None) -> None:
@@ -378,8 +414,7 @@ def delete_design_workspace_for_part(part, user=None) -> int:
         workspace = getattr(part_step, "design_workspace", None)
         if not workspace:
             continue
-        for design_file in workspace.files.prefetch_related("revisions"):
-            _clear_design_file_revisions(design_file)
+        _clear_design_workspace_revisions(workspace)
         workspace.files.all().delete()
         workspace.delete()
         deleted += 1
