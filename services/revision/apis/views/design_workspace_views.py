@@ -231,7 +231,7 @@ class DesignFileRevisionViewSet(viewsets.ViewSet):
 
             if not is_grid_design_file(revision.design_file.file_type):
                 return global_response_errors(
-                    {"file_type": "Grid tiles API is only available for S1!"}
+                    {"file_type": "Grid tiles API is only available for S!"}
                 )
             serializer = DesignFileTilesPatchSerializer(
                 data=request.data,

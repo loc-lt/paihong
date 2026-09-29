@@ -44,12 +44,24 @@ def create_empty_grid_snapshot(
 
 
 def _load_snapshot(file_object: FileObject) -> dict[str, Any]:
+    from rest_framework.exceptions import ValidationError
+
     raw = read_file_object_bytes(file_object)
     try:
         decompressed = gzip.decompress(raw)
     except OSError:
         decompressed = raw
-    return json.loads(decompressed.decode("utf-8"))
+    try:
+        return json.loads(decompressed.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValidationError(
+            {
+                "snapshot_file": (
+                    "Revision snapshot is not a grid snapshot. "
+                    "Complete BUILD_GRID again to rebuild the design workspace!"
+                )
+            }
+        ) from exc
 
 
 def _dump_snapshot(payload: dict[str, Any]) -> bytes:

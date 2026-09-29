@@ -7,7 +7,7 @@ from PIL import Image
 
 from core.models import DesignFileRevision, FileObject
 from core.services.design_files import is_grid_design_file
-from core.services.file_storage import delete_file_object, store_bytes_content
+from core.services.file_storage import delete_file_object_if_unreferenced, store_bytes_content
 from core.services.design_grid.color_code import normalize_color_code, paint_color_code
 from core.services.design_grid.snapshot import _load_snapshot
 from core.services.design_grid.tile_codec import decode_tile_bytes
@@ -158,6 +158,5 @@ def refresh_design_file_revision_preview(
         revision.save(update_fields=["preview_file", "modified"])
     if old_preview_id := getattr(old_preview, "id", None):
         if revision.preview_file_id and old_preview_id != revision.preview_file_id:
-            delete_file_object(old_preview)
-            old_preview.delete()
+            delete_file_object_if_unreferenced(old_preview)
     return revision

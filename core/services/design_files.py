@@ -8,8 +8,8 @@ DESIGN_FILE_SEQUENCE = ("S", "S1", "C", "H", "P", "F", "FC", "KMO")
 GRID_DESIGN_FILE_TYPES = frozenset({"S"})
 
 DESIGN_FILE_SPECS: dict[str, dict[str, str | bool]] = {
-    "S": {"filename_template": "{product_code}_S.png", "grid": False},
-    "S1": {"filename_template": "{product_code}_S1.png", "grid": True},
+    "S": {"filename_template": "{product_code}_S.png", "grid": True},
+    "S1": {"filename_template": "{product_code}_S1.png", "grid": False},
     "C": {"filename_template": "{product_code}_C.png", "grid": False},
     "H": {"filename_template": "{product_code}_H.png", "grid": False},
     "P": {"filename_template": "{product_code}_P.png", "grid": False},

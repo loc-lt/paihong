@@ -115,6 +115,25 @@ def delete_file_object(file_object: FileObject) -> None:
     backend.delete(file_object.storage_key)
 
 
+def is_file_object_referenced(file_object: FileObject) -> bool:
+    for relation in FileObject._meta.related_objects:
+        if not relation.one_to_many and not relation.one_to_one:
+            continue
+        manager = relation.related_model._base_manager
+        if manager.filter(**{relation.field.name: file_object}).exists():
+            return True
+    return False
+
+
+def delete_file_object_if_unreferenced(file_object: FileObject) -> bool:
+    """Blobs are deduplicated by sha256, so one FileObject may back many rows."""
+    if is_file_object_referenced(file_object):
+        return False
+    delete_file_object(file_object)
+    file_object.delete()
+    return True
+
+
 def read_file_object_bytes(file_object: FileObject) -> bytes:
     backend = get_storage_backend(file_object.storage_backend)
     if isinstance(backend, LocalStorageBackend):

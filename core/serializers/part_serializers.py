@@ -10,7 +10,7 @@ from core.serializers.fields import coerce_optional_string
 from core.serializers.file_serializers import FileObjectSerializer
 from core.serializers.revision_serializers import validate_revision_upload
 from core.serializers.source_document_serializers import SourceDocumentSerializer
-from core.services.file_storage import delete_file_object, store_uploaded_file
+from core.services.file_storage import delete_file_object_if_unreferenced, store_uploaded_file
 
 
 class PartSerializer(serializers.ModelSerializer):
@@ -112,19 +112,14 @@ class UpdatePartSerializer(serializers.ModelSerializer):
         preview = validated_data.pop("preview", serializers.empty)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        old_preview = None
         if preview is not serializers.empty:
-            if preview is None:
-                if instance.preview_file_id:
-                    old = instance.preview_file
-                    delete_file_object(old)
-                    old.delete()
-                instance.preview_file = None
-            else:
-                if instance.preview_file_id:
-                    old = instance.preview_file
-                    delete_file_object(old)
-                    old.delete()
-                instance.preview_file = store_uploaded_file(preview, created_by=user)
+            old_preview = instance.preview_file if instance.preview_file_id else None
+            instance.preview_file = (
+                store_uploaded_file(preview, created_by=user) if preview else None
+            )
         instance.updated_by = user
         instance.save()
+        if old_preview and old_preview.id != instance.preview_file_id:
+            delete_file_object_if_unreferenced(old_preview)
         return instance

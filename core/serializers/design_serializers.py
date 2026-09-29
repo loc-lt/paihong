@@ -168,7 +168,7 @@ class DesignFileRevisionSaveSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {
                     "file_type": (
-                        f"Layer panel save is only supported for S1, "
+                        f"Layer panel save is only supported for grid files, "
                         f"not {design_file.file_type}!"
                     )
                 }
@@ -205,7 +205,7 @@ class DesignFileRevisionSaveSerializer(serializers.Serializer):
                 {
                     "revision": (
                         f"No revision for file {design_file.file_type} yet. "
-                        "Grid layers must be saved on S1 after BUILD_GRID."
+                        "Complete BUILD_GRID to create the grid file S."
                     )
                 }
             )
