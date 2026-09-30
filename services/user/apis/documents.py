@@ -39,6 +39,10 @@ logout_user_document = {
 
 refresh_token_document = {
     "summary": "Refresh token.",
+    "description": (
+        "Public endpoint. Send `refresh_token` from login (same key as login/logout). "
+        "Legacy key `refresh` is still accepted."
+    ),
     "request": RefreshTokenSerializer,
     "responses": {200: UserSerializerWithToken},
 }

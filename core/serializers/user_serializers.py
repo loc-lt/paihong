@@ -374,12 +374,22 @@ class LogoutSerializer(serializers.Serializer):
 
 
 class RefreshTokenSerializer(serializers.Serializer):
-    refresh = serializers.CharField(
-        required=True,
+    refresh_token = serializers.CharField(
+        required=False,
         allow_blank=False,
         trim_whitespace=True,
         error_messages={
-            "required": "Refresh token is required!",
+            "blank": "Refresh token cannot be empty!",
+            "null": "Refresh token is required!",
+            "invalid": "Refresh token must be a string!",
+        },
+    )
+    refresh = serializers.CharField(
+        required=False,
+        allow_blank=False,
+        trim_whitespace=True,
+        help_text="Deprecated alias of `refresh_token`.",
+        error_messages={
             "blank": "Refresh token cannot be empty!",
             "null": "Refresh token is required!",
             "invalid": "Refresh token must be a string!",
@@ -387,7 +397,11 @@ class RefreshTokenSerializer(serializers.Serializer):
     )
 
     def validate(self, attrs):
-        raw_token = attrs.get("refresh")
+        raw_token = attrs.get("refresh_token") or attrs.get("refresh")
+        if not raw_token:
+            raise serializers.ValidationError(
+                {"refresh_token": "Refresh token is required!"}
+            )
         try:
             refresh = RefreshToken(raw_token)
             user_id = refresh[api_settings.USER_ID_CLAIM]
