@@ -81,7 +81,7 @@ class WorkItemViewSet(viewsets.ViewSet):
     @action(
         detail=False,
         methods=["get"],
-        url_path=r"item_codes/(?P<item_code>[^/.]+)/availability",
+        url_path=r"item_codes/(?P<item_code>[^/]+)/availability",
     )
     def item_code_availability(self, request, item_code=None):
         code = unquote(item_code or "").strip()
