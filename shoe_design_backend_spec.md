@@ -501,7 +501,7 @@ Prefix: `/api/v1/`. Auth: Bearer JWT (trừ login/register/refresh).
 | POST   | `/api/v1/auth/login/`         | Public |             |
 | POST   | `/api/v1/auth/logout/`        | User   |             |
 | GET    | `/api/v1/auth/me/`            | User   |             |
-| POST   | `/api/v1/auth/refresh/`       | Public |             |
+| POST   | `/api/v1/auth/refresh/`       | Public | Body `{"refresh_token": "..."}` (key `refresh` cũ vẫn nhận) |
 | GET    | `/api/v1/users/`              | Staff  | Paginated   |
 | POST   | `/api/v1/users/`              | Staff  |             |
 | GET    | `/api/v1/users/{id}/`         | Staff  |             |
