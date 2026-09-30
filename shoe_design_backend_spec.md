@@ -527,8 +527,10 @@ Default users (seeder): `admin`, `designer`, `developer` — password `Defaultpa
 | GET    | `/api/v1/source_documents/{id}/`              | User  |                                                                                        |
 | DELETE | `/api/v1/source_documents/{id}/`              | User  |                                                                                        |
 | GET    | `/api/v1/source_documents/{source_id}/parts/` | User  | Paginated                                                                              |
+| POST   | `/api/v1/parts/`                              | Staff | Multipart: `source_document_id`, `preview` (bắt buộc), `name`; `sequence` = max+1; init steps như import (RECEIVE_FILES DONE) |
 | GET    | `/api/v1/parts/{id}/`                         | User  | Part detail + nested source_document + file URL                                        |
-| PATCH  | `/api/v1/parts/{id}/`                         | User  | `name`, `status`; multipart field `preview` để thay ảnh part (khi import PDF sai vùng) |
+| PATCH  | `/api/v1/parts/{id}/`                         | Staff | `name`, `status`; multipart field `preview` để thay ảnh part (khi import PDF sai vùng) |
+| DELETE | `/api/v1/parts/{id}/`                         | Staff | Xóa part + steps + revisions + workspace bước 10; dọn blob không còn tham chiếu; không đánh lại `sequence` |
 | GET    | `/api/v1/workflow_templates/`                 | Staff |                                                                                        |
 | POST   | `/api/v1/workflow_templates/`                 | Staff |                                                                                        |
 | GET    | `/api/v1/workflow_templates/{id}/`            | Staff |                                                                                        |

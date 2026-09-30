@@ -5,12 +5,13 @@ from core.constant import (
     MAX_IMAGE_SIZE,
     PartStatusEnum,
 )
-from core.models import Part
+from core.models import Part, SourceDocument
 from core.serializers.fields import coerce_optional_string
 from core.serializers.file_serializers import FileObjectSerializer
 from core.serializers.revision_serializers import validate_revision_upload
 from core.serializers.source_document_serializers import SourceDocumentSerializer
 from core.services.file_storage import delete_file_object_if_unreferenced, store_uploaded_file
+from core.services.part_manage import create_manual_part
 
 
 class PartSerializer(serializers.ModelSerializer):
@@ -57,6 +58,65 @@ class WorkItemPartsListSerializer(serializers.Serializer):
     completed_parts = serializers.IntegerField(read_only=True)
 
 
+def _validate_preview_upload(value):
+    if value.size > MAX_IMAGE_SIZE:
+        raise serializers.ValidationError("Preview image must be smaller than 50 MB!")
+    validate_revision_upload(value)
+    extension = (value.name or "").rsplit(".", 1)[-1].lower()
+    if extension not in ALLOWED_ARTIFACT_EXTENSIONS:
+        allowed = ", ".join(ext.upper() for ext in ALLOWED_ARTIFACT_EXTENSIONS)
+        raise serializers.ValidationError(f"Preview must be one of: {allowed}!")
+    return value
+
+
+class CreatePartSerializer(serializers.Serializer):
+    source_document_id = serializers.PrimaryKeyRelatedField(
+        queryset=SourceDocument.objects.all(),
+        source="source_document",
+        error_messages={
+            "required": "Source document is required!",
+            "null": "Source document is required!",
+            "does_not_exist": "Source document not found!",
+            "incorrect_type": "Invalid source document ID format!",
+        },
+    )
+    name = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        max_length=255,
+        trim_whitespace=True,
+        error_messages={
+            "invalid": "Part name must be a string!",
+            "max_length": "Part name cannot exceed 255 characters!",
+        },
+    )
+    preview = serializers.FileField(
+        write_only=True,
+        help_text="Part preview image (SVG recommended; PNG, JPG, JPEG also accepted).",
+        error_messages={
+            "required": "Preview image is required!",
+            "null": "Preview image is required!",
+            "empty": "Preview image cannot be empty!",
+        },
+    )
+
+    def validate_name(self, value):
+        return coerce_optional_string(value)
+
+    def validate_preview(self, value):
+        return _validate_preview_upload(value)
+
+    def create(self, validated_data):
+        user = self.context["request"].user
+        return create_manual_part(
+            source_document=validated_data["source_document"],
+            preview_file=store_uploaded_file(validated_data["preview"], created_by=user),
+            name=validated_data.get("name") or "",
+            user=user,
+        )
+
+
 class UpdatePartSerializer(serializers.ModelSerializer):
     name = serializers.CharField(
         required=False,
@@ -98,14 +158,7 @@ class UpdatePartSerializer(serializers.ModelSerializer):
     def validate_preview(self, value):
         if value is None:
             return None
-        if value.size > MAX_IMAGE_SIZE:
-            raise serializers.ValidationError("Preview image must be smaller than 50 MB!")
-        validate_revision_upload(value)
-        extension = (value.name or "").rsplit(".", 1)[-1].lower()
-        if extension not in ALLOWED_ARTIFACT_EXTENSIONS:
-            allowed = ", ".join(ext.upper() for ext in ALLOWED_ARTIFACT_EXTENSIONS)
-            raise serializers.ValidationError(f"Preview must be one of: {allowed}!")
-        return value
+        return _validate_preview_upload(value)
 
     def update(self, instance, validated_data):
         user = self.context["request"].user
