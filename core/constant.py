@@ -117,6 +117,11 @@ STAFF_ROLES = (
 ADMIN_ROLES = STAFF_ROLES
 DESIGN_ROLES = STAFF_ROLES
 
+SYSTEM_COLOR_ADMIN_ROLES = (
+    UserRoleEnum.DEVELOPER.value,
+    UserRoleEnum.ADMIN.value,
+)
+
 USER_ROLE_DESCRIPTION = choices_description(UserRoleEnum, "User role")
 USER_STATUS_DESCRIPTION = choices_description(UserStatusEnum, "User status")
 WORK_ITEM_STATUS_DESCRIPTION = choices_description(

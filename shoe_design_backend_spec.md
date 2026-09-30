@@ -303,8 +303,17 @@ Grid body **không** lưu trong PostgreSQL rows — snapshot + tile blobs trên 
 
 | Model                 | Ghi chú                                                                   |
 | --------------------- | ------------------------------------------------------------------------- |
-| `ColorDefinition`     | System palette: `code`, `hex_value`, `name`, `default_order`, `is_system` |
-| `UserColorPreference` | User overrides/custom colors + `display_order`                            |
+| `ColorDefinition`     | System palette: `code`, `hex_value`, `name`, `display_order`, `is_system`. Chỉ **Admin/Developer** được thêm/sửa/xóa qua `/system_colors`; user khác chỉ load |
+| `UserColorPreference` | Chỉ màu **custom** của user: `code`, `custom_hex`, `custom_name`, `display_order`. Không còn override màu system (đã bỏ FK `color_definition`, migration `0008`) |
+
+Cả 2 model dùng chung tên field sắp xếp `display_order` (migration `0009` đổi `ColorDefinition.default_order` → `display_order`).
+
+**Rule màu system:** `code` unique trong system (constraint DB), `hex_value` chuẩn hóa `#RRGGBB` và không trùng hex system khác (không phân biệt hoa/thường), `name` bắt buộc. Thêm/sửa màu system **không** kiểm tra trùng với màu custom đã có của user.
+
+**Rule màu custom** (enforce ở serializer + DB):
+
+- `code` bắt buộc, integer ≥ 1, **unique trong các màu custom của chính user** (constraint DB `uq_user_color_code` trên `(user, code)`). Được trùng `code` của màu system và của user khác.
+- `hex_value` bắt buộc, chuẩn hóa `#RRGGBB`, **không trùng** (không phân biệt hoa/thường) với màu custom khác của chính user **và** với mọi màu system.
 
 
 Grid snapshot và `layers[]` dùng `color_code` dạng `#RRGGBB` (không dùng UUID). API normalize paint/layer khi PATCH tiles và autosave layers; field legacy `color_id`/`hex` vẫn được chấp nhận và map sang `color_code`.
@@ -556,11 +565,15 @@ Default users (seeder): `admin`, `designer`, `developer` — password `Defaultpa
 | GET    | `/api/v1/design_file_revisions/{id}/tiles/?x0&y0&x1&y1`            | User  | Viewport tile load (**chỉ S1**)                                                              |
 | PATCH  | `/api/v1/design_file_revisions/{id}/tiles/`                        | Staff | Batch tile upload (**chỉ S1**)                                                               |
 | POST   | `/api/v1/design_file_revisions/{id}/restore/`                      | Staff | Restore design file revision                                                                 |
-| GET    | `/api/v1/colors/`                                                  | User  | System block (fixed `display_order` = `default_order`) + custom block (user `display_order`) |
-| POST   | `/api/v1/colors/`                                                  | Staff | Custom color or system name/hex override; `display_order` only for custom                    |
-| PATCH  | `/api/v1/colors/{id}/`                                             | Staff | Update custom name/hex/order or system override name/hex (`UserColorPreference` id)          |
-| DELETE | `/api/v1/colors/{id}/`                                             | Staff | Remove user color                                                                            |
-| GET    | `/api/v1/system_colors/`                                           | User  | System palette only                                                                          |
+| GET    | `/api/v1/colors/`                                                  | User  | System block (theo `display_order`) + custom block của user (theo `display_order`)           |
+| POST   | `/api/v1/colors/`                                                  | Staff | Tạo màu custom: `code`, `hex_value` bắt buộc; `name`, `display_order` optional               |
+| PATCH  | `/api/v1/colors/{id}/`                                             | Staff | Sửa màu custom (`code`, `hex_value`, `name`, `display_order`); id system → 400               |
+| DELETE | `/api/v1/colors/{id}/`                                             | Staff | Xóa màu custom; id system → 400                                                              |
+| GET    | `/api/v1/system_colors/`                                           | User  | Danh sách màu system                                                                         |
+| GET    | `/api/v1/system_colors/{id}/`                                      | User  | Chi tiết màu system                                                                          |
+| POST   | `/api/v1/system_colors/`                                           | Admin/Developer | Thêm màu system: `code`, `hex_value`, `name` bắt buộc; `display_order` optional    |
+| PATCH  | `/api/v1/system_colors/{id}/`                                      | Admin/Developer | Sửa `code`, `hex_value`, `name`, `display_order`                                   |
+| DELETE | `/api/v1/system_colors/{id}/`                                      | Admin/Developer | Xóa màu system                                                                     |
 
 
 **Design file sequence:** `S → S1 → C → H → P → F → FC → KMO` (`DESIGN_FILE_SEQUENCE`). Tên file: `{item_code}_S.png`, `{item_code}_S1.png`, … `{item_code}.kmo`. **BUILD_GRID** chỉ tạo revision file **S** (PNG placeholder); grid snapshot lưu trong `workspace.settings.grid_snapshot_id`. Revision **S1** được tạo khi **complete file S** (hoặc backfill nếu S đã done). Workspace cũ thiếu S/S1 được backfill khi `GET workspace`. **Không khóa file** — FE mở/xem/edit tab tự do. **Complete** phải đúng thứ tự: BE trả 400 nếu file trước chưa `progress=done` (vd. `"Complete S before S1!"`). Chỉ **S1** dùng grid PATCH/GET tiles; `layers[]` đổi `z_order` qua autosave/save.
@@ -643,6 +656,7 @@ ADMIN_ROLES = DESIGN_ROLES = STAFF_ROLES  # tạm thời staff có quyền như 
 | ------------------------------------ | --------------------------------------------- |
 | `require_admin` / `can_manage_users` | User CRUD, workflow template/step admin       |
 | `require_design`                     | sync-steps, autosave, save, complete, restore |
+| `require_system_color_admin`         | POST/PATCH/DELETE `/system_colors` — chỉ Developer, Admin (`SYSTEM_COLOR_ADMIN_ROLES`, không gồm Designer) |
 | Authenticated user                   | Đọc hầu hết design/revision data              |
 
 

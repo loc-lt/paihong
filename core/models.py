@@ -714,12 +714,12 @@ class ColorDefinition(TimeStampedModel):
     code = models.PositiveSmallIntegerField(unique=True, null=False, blank=False)
     hex_value = models.CharField(max_length=7, null=False, blank=False)
     name = models.CharField(max_length=100, null=False, blank=False)
-    default_order = models.PositiveSmallIntegerField(default=0, null=False, blank=False)
+    display_order = models.PositiveSmallIntegerField(default=0, null=False, blank=False)
     is_system = models.BooleanField(null=False, default=True)
 
     class Meta:
         db_table = "color_definition"
-        ordering = ["default_order", "code"]
+        ordering = ["display_order", "code"]
 
     def __str__(self):
         return f"{self.code} - {self.name}"
@@ -736,14 +736,8 @@ class UserColorPreference(TimeStampedModel):
         null=False,
         blank=False,
     )
-    color_definition = models.ForeignKey(
-        ColorDefinition,
-        null=True,
-        blank=True,
-        related_name="user_preferences",
-        on_delete=models.CASCADE,
-    )
-    custom_hex = models.CharField(max_length=7, null=False, blank=True, default="")
+    code = models.PositiveSmallIntegerField(null=False, blank=False)
+    custom_hex = models.CharField(max_length=7, null=False, blank=False)
     custom_name = models.CharField(max_length=100, null=False, blank=True, default="")
     display_order = models.PositiveSmallIntegerField(default=0, null=False, blank=False)
 
@@ -752,15 +746,13 @@ class UserColorPreference(TimeStampedModel):
         ordering = ["display_order", "created"]
         constraints = [
             models.UniqueConstraint(
-                fields=["user", "color_definition"],
-                name="uq_user_color_definition",
-                condition=models.Q(color_definition__isnull=False),
+                fields=["user", "code"],
+                name="uq_user_color_code",
             ),
         ]
 
     def __str__(self):
-        label = self.custom_name or (self.color_definition.name if self.color_definition else "")
-        return f"{self.user} - {label}"
+        return f"{self.user} - {self.code} {self.custom_name or self.custom_hex}"
 
 
 class Notification(TimeStampedModel):

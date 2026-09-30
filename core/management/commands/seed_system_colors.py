@@ -34,7 +34,7 @@ class Command(BaseCommand):
                 defaults={
                     "hex_value": hex_value,
                     "name": name,
-                    "default_order": order,
+                    "display_order": order,
                     "is_system": True,
                 },
             )

@@ -1,7 +1,7 @@
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission
 
-from core.constant import STAFF_ROLES, UserStatusEnum
+from core.constant import SYSTEM_COLOR_ADMIN_ROLES, STAFF_ROLES, UserStatusEnum
 
 
 def is_staff(user) -> bool:
@@ -30,6 +30,11 @@ class IsActiveUser(BasePermission):
 
 def require_admin(user):
     if not is_staff(user):
+        raise PermissionDenied()
+
+
+def require_system_color_admin(user):
+    if getattr(user, "role", None) not in SYSTEM_COLOR_ADMIN_ROLES:
         raise PermissionDenied()
 
 
