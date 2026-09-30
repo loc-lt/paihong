@@ -65,7 +65,12 @@ patch_design_file_tiles_document = {
     "summary": "Batch-update grid tiles on a design file revision.",
     "description": (
         "Updates snapshot tiles in-place and regenerates `preview_file` "
-        "(PNG thumbnail of the current grid)."
+        "(PNG thumbnail of the current grid). Each cell paint keeps "
+        "`color_code`, `order`, `is_hidden`, `is_lock`. "
+        "Optional `grid_width` + `grid_height` resize this revision: all existing "
+        "tiles are dropped and replaced by the tiles in this request (later PATCHes "
+        "with the same size merge as usual). BUILD_GRID only sets the size of the "
+        "first S revision. Tiles and cells outside the grid are rejected (400)."
     ),
     "parameters": [UUID_PATH_PARAM],
     "request": DesignFileTilesPatchSerializer,

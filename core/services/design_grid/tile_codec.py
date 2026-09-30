@@ -11,7 +11,38 @@ def normalize_paint(paint: dict) -> dict:
         "color_code": paint_color_code(paint),
         "order": int(paint.get("order") or 1),
         "is_hidden": bool(paint.get("is_hidden", False)),
+        "is_lock": bool(paint.get("is_lock", False)),
     }
+
+
+def _parse_cell_key(key: str) -> tuple[int, int]:
+    x_str, _, y_str = key.partition(",")
+    try:
+        return int(x_str), int(y_str)
+    except ValueError as exc:
+        raise ValueError(f"Invalid cell key: {key!r}. Expected 'x,y' integers.") from exc
+
+
+def validate_tile_bounds(
+    *,
+    tile_key: str,
+    payload: dict[str, Any],
+    grid_width: int,
+    grid_height: int,
+    tile_size: int,
+) -> None:
+    tx_str, _, ty_str = tile_key.partition("_")
+    tx, ty = int(tx_str), int(ty_str)
+    if tx * tile_size >= grid_width or ty * tile_size >= grid_height:
+        raise ValueError(
+            f"Tile {tile_key} is outside the {grid_width}x{grid_height} grid!"
+        )
+    for key in payload.get("cells") or {}:
+        x, y = _parse_cell_key(key)
+        if not (0 <= x < grid_width and 0 <= y < grid_height):
+            raise ValueError(
+                f"Cell {key!r} is outside the {grid_width}x{grid_height} grid!"
+            )
 
 
 def normalize_tile_payload(payload: dict[str, Any]) -> dict[str, Any]:

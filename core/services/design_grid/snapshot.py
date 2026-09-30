@@ -98,8 +98,17 @@ def write_tiles_to_snapshot(
     snapshot_file: FileObject,
     tile_updates: dict[str, bytes | str],
     created_by=None,
+    grid_width: int | None = None,
+    grid_height: int | None = None,
 ) -> FileObject:
+    """Merge tiles; a new grid size drops every existing tile before merging."""
     payload = _load_snapshot(snapshot_file)
+    if grid_width and grid_height and (
+        grid_width != payload.get("width") or grid_height != payload.get("height")
+    ):
+        payload["width"] = grid_width
+        payload["height"] = grid_height
+        payload["tiles"] = {}
     tiles = payload.setdefault("tiles", {})
     for key, value in tile_updates.items():
         if isinstance(value, str):

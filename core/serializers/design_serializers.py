@@ -3,7 +3,7 @@ import binascii
 
 from rest_framework import serializers
 
-from core.constant import RevisionTypeEnum
+from core.constant import GRID_TILE_SIZE, INTEGER_FIELD_MAX_VALUE, RevisionTypeEnum
 from core.services.design_files import DESIGN_FILE_SEQUENCE, build_design_file_display_name
 from core.models import DesignFile, DesignFileRevision, DesignWorkspace
 from core.serializers.file_serializers import FileObjectSerializer
@@ -286,35 +286,90 @@ class TileUpdateSerializer(serializers.Serializer):
 
 
 class DesignFileTilesPatchSerializer(serializers.Serializer):
-    tiles = TileUpdateSerializer(many=True, allow_empty=False)
+    tiles = TileUpdateSerializer(many=True, required=False, default=list)
+    grid_width = serializers.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=INTEGER_FIELD_MAX_VALUE,
+        help_text=(
+            "New grid width. Send together with grid_height to resize this revision; "
+            "resizing drops all existing tiles, so send the full tile set for the new size."
+        ),
+    )
+    grid_height = serializers.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=INTEGER_FIELD_MAX_VALUE,
+        help_text="New grid height. Send together with grid_width.",
+    )
+
+    def validate(self, attrs):
+        has_width = "grid_width" in attrs
+        has_height = "grid_height" in attrs
+        if has_width != has_height:
+            raise serializers.ValidationError(
+                {"grid_width": "grid_width and grid_height must be sent together!"}
+            )
+        if not attrs.get("tiles") and not has_width:
+            raise serializers.ValidationError(
+                {"tiles": "Tiles are required unless the grid is being resized!"}
+            )
+        return attrs
 
     def apply(self, *, revision):
         import base64
 
         from core.services.design_grid.preview import refresh_design_file_revision_preview
         from core.services.design_grid.snapshot import write_tiles_to_snapshot
-        from core.services.design_grid.tile_codec import normalize_tile_update_bytes
+        from core.services.design_grid.tile_codec import (
+            decode_tile_bytes,
+            encode_tile_bytes,
+            validate_tile_bounds,
+        )
 
         user = self.context["request"].user
+        grid_width = self.validated_data.get("grid_width") or revision.grid_width
+        grid_height = self.validated_data.get("grid_height") or revision.grid_height
+        resized = (grid_width, grid_height) != (revision.grid_width, revision.grid_height)
+
         tile_updates = {}
         for item in self.validated_data["tiles"]:
             try:
-                raw = normalize_tile_update_bytes(base64.b64decode(item["data"]))
+                payload = decode_tile_bytes(base64.b64decode(item["data"]))
+                validate_tile_bounds(
+                    tile_key=item["key"],
+                    payload=payload,
+                    grid_width=grid_width,
+                    grid_height=grid_height,
+                    tile_size=GRID_TILE_SIZE,
+                )
             except ValueError as exc:
                 raise serializers.ValidationError(
                     {"tiles": f"Tile {item['key']}: {exc}"}
                 ) from exc
-            tile_updates[item["key"]] = raw
-        merged_file = write_tiles_to_snapshot(
+            tile_updates[item["key"]] = encode_tile_bytes(payload).hex()
+
+        revision.snapshot_file = write_tiles_to_snapshot(
             snapshot_file=revision.snapshot_file,
-            tile_updates={key: value.hex() for key, value in tile_updates.items()},
+            tile_updates=tile_updates,
             created_by=user,
+            grid_width=grid_width,
+            grid_height=grid_height,
         )
-        manifest = dict(revision.tile_manifest or {})
-        manifest.update({key: value.hex() for key, value in tile_updates.items()})
-        revision.snapshot_file = merged_file
+        manifest = {} if resized else dict(revision.tile_manifest or {})
+        manifest.update(tile_updates)
         revision.tile_manifest = manifest
-        revision.save(update_fields=["snapshot_file", "tile_manifest", "modified"])
+        revision.grid_width = grid_width
+        revision.grid_height = grid_height
+        revision.save(
+            update_fields=[
+                "snapshot_file",
+                "tile_manifest",
+                "grid_width",
+                "grid_height",
+                "modified",
+            ]
+        )
         refresh_design_file_revision_preview(revision=revision, user=user)
         return revision
 

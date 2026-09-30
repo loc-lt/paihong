@@ -293,7 +293,7 @@ Property: `work_item` → `source_document.work_item`.
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DesignWorkspace`    | 1:1 `PartStep` (START_DESIGNING); `settings` JSON nhẹ (active_file_type, progress)                                                                |
 | `DesignFile`         | unique `(workspace, file_type)`; 8 slots: `S,S1,C,H,P,F,FC,KMO`; `display_name` = `{item_code}_*.png` / `{item_code}.kmo`                         |
-| `DesignFileRevision` | immutable revisions; `layers[]`, `grid_width/height`, `snapshot_file` → FileObject (gzip JSON tile map), `preview_file` → PNG thumbnail (BE regenerate on PATCH tiles / complete S1); `tile_manifest` nội bộ BE, không expose API |
+| `DesignFileRevision` | immutable revisions; `layers[]`, `grid_width/height` (kích thước grid **của revision này**, đổi được qua PATCH tiles), `snapshot_file` → FileObject (gzip JSON tile map), `preview_file` → PNG thumbnail (BE regenerate on PATCH tiles / save / complete file grid); `tile_manifest` nội bộ BE, không expose API |
 
 
 Grid body **không** lưu trong PostgreSQL rows — snapshot + tile blobs trên object storage (`GRID_TILE_SIZE=64`, schema v2).
@@ -562,8 +562,8 @@ Default users (seeder): `admin`, `designer`, `developer` — password `Defaultpa
 | POST   | `/api/v1/parts/{id}/steps/START_DESIGNING/files/{type}/autosave/`  | Staff | Design file autosave (`revision_type=1`; same body as save; no dedup/prune yet)              |
 | POST   | `/api/v1/parts/{id}/steps/START_DESIGNING/files/{type}/save/`      | Staff | Design file manual save (`revision_type=2`)                                                  |
 | POST   | `/api/v1/parts/{id}/steps/START_DESIGNING/files/{type}/complete/`  | Staff | Merge tiles → official; cập nhật `progress`; complete KMO → done step 10                     |
-| GET    | `/api/v1/design_file_revisions/{id}/tiles/?x0&y0&x1&y1`            | User  | Viewport tile load (**chỉ S1**)                                                              |
-| PATCH  | `/api/v1/design_file_revisions/{id}/tiles/`                        | Staff | Batch tile upload (**chỉ S1**)                                                               |
+| GET    | `/api/v1/design_file_revisions/{id}/tiles/?x0&y0&x1&y1`            | User  | Viewport tile load (**chỉ S**)                                                               |
+| PATCH  | `/api/v1/design_file_revisions/{id}/tiles/`                        | Staff | Batch tile upload (**chỉ S**); optional `grid_width` + `grid_height` để đổi kích thước       |
 | POST   | `/api/v1/design_file_revisions/{id}/restore/`                      | Staff | Restore design file revision                                                                 |
 | GET    | `/api/v1/colors/`                                                  | User  | System block (theo `display_order`) + custom block của user (theo `display_order`)           |
 | POST   | `/api/v1/colors/`                                                  | Staff | Tạo màu custom: `code`, `hex_value` bắt buộc; `name`, `display_order` optional               |
@@ -576,7 +576,7 @@ Default users (seeder): `admin`, `designer`, `developer` — password `Defaultpa
 | DELETE | `/api/v1/system_colors/{id}/`                                      | Admin/Developer | Xóa màu system                                                                     |
 
 
-**Design file sequence:** `S → S1 → C → H → P → F → FC → KMO` (`DESIGN_FILE_SEQUENCE`). Tên file: `{item_code}_S.png`, `{item_code}_S1.png`, … `{item_code}.kmo`. **BUILD_GRID** chỉ tạo revision file **S** (PNG placeholder); grid snapshot lưu trong `workspace.settings.grid_snapshot_id`. Revision **S1** được tạo khi **complete file S** (hoặc backfill nếu S đã done). Workspace cũ thiếu S/S1 được backfill khi `GET workspace`. **Không khóa file** — FE mở/xem/edit tab tự do. **Complete** phải đúng thứ tự: BE trả 400 nếu file trước chưa `progress=done` (vd. `"Complete S before S1!"`). Chỉ **S1** dùng grid PATCH/GET tiles; `layers[]` đổi `z_order` qua autosave/save.
+**Design file sequence:** `S → S1 → C → H → P → F → FC → KMO` (`DESIGN_FILE_SEQUENCE`). Tên file: `{item_code}_S.png`, `{item_code}_S1.png`, … `{item_code}.kmo`. **BUILD_GRID** tạo revision 1 của file **S** với grid snapshot trống kích thước `settings.grid.width × height` + preview PNG. Kích thước này **chỉ áp dụng cho revision đầu tiên**: FE đổi kích thước bất kỳ lúc nào bằng `PATCH tiles` với `grid_width` + `grid_height` (BE xóa tile cũ, ghi tile mới theo size mới); revision tạo sau đó copy kích thước từ revision latest. `workspace.settings.grid` chỉ là kích thước ban đầu. Mỗi paint trong cell giữ `color_code`, `order`, `is_hidden`, `is_lock`. **Không khóa file** — FE mở/xem/edit tab tự do. **Complete** phải đúng thứ tự: BE trả 400 nếu file trước chưa `progress=done` (vd. `"Complete S before S1!"`). Chỉ **S** dùng grid PATCH/GET tiles; `layers[]` đổi `z_order` qua autosave/save.
 
 Seed colors: `python manage.py seed_system_colors`.
 
