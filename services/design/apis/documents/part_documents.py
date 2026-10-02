@@ -1,23 +1,25 @@
-from drf_spectacular.utils import OpenApiResponse
+from drf_spectacular.utils import OpenApiExample, OpenApiRequest, OpenApiResponse
 
 from core.openapi_params import SOURCE_ID_PATH_PARAM, UUID_PATH_PARAM
 from core.serializers.part_serializers import (
-    CreatePartSerializer,
+    BulkCreatePartSerializer,
+    BulkDeletePartSerializer,
     PartDetailSerializer,
     PartSerializer,
     UpdatePartSerializer,
 )
 
 create_part_document = {
-    "summary": "Create a part manually for a source document.",
+    "summary": "Create one or more parts for a source document.",
     "description": (
-        "multipart/form-data: `source_document_id`, `preview` (required), `name` "
-        "(optional, default `Part {sequence}`). `sequence` is assigned as the next "
-        "number within the source document. Workflow steps are initialized like PDF "
+        "multipart/form-data. `source_document_id` once. Repeat `previews` once per "
+        "part (required). Names are assigned `New part 1`, `New part 2`, … continuing "
+        "after parts that already exist on the source document. Sequences continue "
+        "from the highest sequence. Each part initializes workflow steps like PDF "
         "import (RECEIVE_FILES auto-completed, PICK_UPPER waits for the user)."
     ),
-    "request": CreatePartSerializer,
-    "responses": {201: PartDetailSerializer},
+    "request": BulkCreatePartSerializer,
+    "responses": {201: PartDetailSerializer(many=True)},
 }
 
 get_part_document = {
@@ -38,13 +40,23 @@ update_part_document = {
 }
 
 delete_part_document = {
-    "summary": "Delete a part.",
+    "summary": "Delete one or more parts.",
     "description": (
-        "Hard-deletes the part with all workflow steps, step revisions and the "
-        "step 10 design workspace. Stored files no longer used by anything else "
-        "are removed. Sequences of the remaining parts are not renumbered."
+        "JSON body `{\"ids\": [\"<uuid>\", ...]}`. Hard-deletes every listed part "
+        "with its workflow steps, step revisions and step 10 design workspace. "
+        "Stored files no longer used by anything else are removed. Unknown ids "
+        "reject the whole request. Sequences of the remaining parts are not renumbered."
     ),
-    "parameters": [UUID_PATH_PARAM],
+    "request": OpenApiRequest(
+        request=BulkDeletePartSerializer,
+        examples=[
+            OpenApiExample(
+                "Delete parts",
+                value={"ids": ["00000000-0000-0000-0000-000000000000"]},
+                request_only=True,
+            )
+        ],
+    ),
     "responses": {200: OpenApiResponse(description="Deleted")},
 }
 

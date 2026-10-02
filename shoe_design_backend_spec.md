@@ -293,7 +293,7 @@ Property: `work_item` → `source_document.work_item`.
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DesignWorkspace`    | 1:1 `PartStep` (START_DESIGNING); `settings` JSON nhẹ (active_file_type, progress)                                                                |
 | `DesignFile`         | unique `(workspace, file_type)`; 8 slots: `S,S1,C,H,P,F,FC,KMO`; `display_name` = `{item_code}_*.png` / `{item_code}.kmo`                         |
-| `DesignFileRevision` | immutable revisions; `layers[]`, `grid_width/height` (kích thước grid **của revision này**, đổi được qua PATCH tiles), `snapshot_file` → FileObject (gzip JSON tile map), `preview_file` → PNG thumbnail (BE regenerate on PATCH tiles / save / complete file grid); `tile_manifest` nội bộ BE, không expose API |
+| `DesignFileRevision` | immutable revisions; `layers[]`, `grid_width/height` (kích thước grid **của revision này**, đổi được qua PATCH tiles), `snapshot_file` → FileObject (gzip JSON tile map), `preview_file` → PNG thumbnail (autosave/save/PATCH tiles/complete giữ preview cũ); `tile_manifest` nội bộ BE, không expose API |
 
 
 Grid body **không** lưu trong PostgreSQL rows — snapshot + tile blobs trên object storage (`GRID_TILE_SIZE=64`, schema v2).
@@ -527,10 +527,10 @@ Default users (seeder): `admin`, `designer`, `developer` — password `Defaultpa
 | GET    | `/api/v1/source_documents/{id}/`              | User  |                                                                                        |
 | DELETE | `/api/v1/source_documents/{id}/`              | User  |                                                                                        |
 | GET    | `/api/v1/source_documents/{source_id}/parts/` | User  | Paginated                                                                              |
-| POST   | `/api/v1/parts/`                              | Staff | Multipart: `source_document_id`, `preview` (bắt buộc), `name`; `sequence` = max+1; init steps như import (RECEIVE_FILES DONE) |
+| POST   | `/api/v1/parts/`                              | Staff | Bulk create. Multipart: `source_document_id` một lần, `previews` lặp mỗi part. `name` = `New part 1`, `New part 2`, … (nối tiếp số part đã có). `sequence` = max+1, +2, …; init steps như import (RECEIVE_FILES DONE) |
 | GET    | `/api/v1/parts/{id}/`                         | User  | Part detail + nested source_document + file URL                                        |
 | PATCH  | `/api/v1/parts/{id}/`                         | Staff | `name`, `status`; multipart field `preview` để thay ảnh part (khi import PDF sai vùng) |
-| DELETE | `/api/v1/parts/{id}/`                         | Staff | Xóa part + steps + revisions + workspace bước 10; dọn blob không còn tham chiếu; không đánh lại `sequence` |
+| DELETE | `/api/v1/parts/`                              | Staff | Bulk delete. Body `{"ids": ["uuid", ...]}`. Xóa từng part + steps + revisions + workspace bước 10; dọn blob không còn tham chiếu; id không tồn tại thì hủy cả request; không đánh lại `sequence` |
 | GET    | `/api/v1/workflow_templates/`                 | Staff |                                                                                        |
 | POST   | `/api/v1/workflow_templates/`                 | Staff |                                                                                        |
 | GET    | `/api/v1/workflow_templates/{id}/`            | Staff |                                                                                        |
@@ -563,9 +563,9 @@ Default users (seeder): `admin`, `designer`, `developer` — password `Defaultpa
 | GET    | `/api/v1/parts/{id}/steps/START_DESIGNING/files/{type}/revisions/` | User  | Revision history                                                                             |
 | POST   | `/api/v1/parts/{id}/steps/START_DESIGNING/files/{type}/autosave/`  | Staff | Design file autosave (`revision_type=1`; same body as save; no dedup/prune yet)              |
 | POST   | `/api/v1/parts/{id}/steps/START_DESIGNING/files/{type}/save/`      | Staff | Design file manual save (`revision_type=2`)                                                  |
-| POST   | `/api/v1/parts/{id}/steps/START_DESIGNING/files/{type}/complete/`  | Staff | Merge tiles → official; cập nhật `progress`; complete KMO → done step 10                     |
+| POST   | `/api/v1/parts/{id}/steps/START_DESIGNING/files/{type}/complete/`  | Staff | Đánh official + cập nhật `progress`; không đọc `tile_manifest`, không vẽ preview; complete KMO → done step 10 |
 | GET    | `/api/v1/design_file_revisions/{id}/tiles/?x0&y0&x1&y1`            | User  | Viewport tile load (**chỉ S**)                                                               |
-| PATCH  | `/api/v1/design_file_revisions/{id}/tiles/`                        | Staff | Batch tile upload (**chỉ S**). `data` = base64(gzip(JSON tile)) hoặc base64(JSON). Chỉ giải nén tile trong request. Optional `grid_width` + `grid_height` để đổi kích thước |
+| PATCH  | `/api/v1/design_file_revisions/{id}/tiles/`                        | Staff | Batch tile upload (**chỉ S**). Lưu nguyên `data` (base64 gzip hoặc base64 JSON), không giải nén, không ghi `tile_manifest`, không vẽ preview. GET trả lại đúng chuỗi đó. Optional `grid_width` + `grid_height` để đổi kích thước |
 | POST   | `/api/v1/design_file_revisions/{id}/restore/`                      | Staff | Restore design file revision                                                                 |
 | GET    | `/api/v1/colors/`                                                  | User  | System block (theo `display_order`) + custom block của user (theo `display_order`)           |
 | POST   | `/api/v1/colors/`                                                  | Staff | Tạo màu custom: `code`, `hex_value` bắt buộc; `name`, `display_order` optional               |

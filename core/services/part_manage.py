@@ -10,32 +10,41 @@ from core.services.part_detection import create_parts_from_detection
 
 
 @transaction.atomic
-def create_manual_part(
+def create_manual_parts(
     *,
     source_document: SourceDocument,
-    preview_file: FileObject,
-    name: str = "",
+    items: list[dict],
     user=None,
-) -> Part:
-    """Add a part by hand; it goes through the same step bootstrap as PDF import."""
-    current = source_document.parts.aggregate(max_no=Max("sequence")).get("max_no")
-    sequence = (current or 0) + 1
-    [part] = create_parts_from_detection(
-        source_document=source_document,
-        parts_data=[
+) -> list[Part]:
+    """Add parts by hand; each one goes through the same step bootstrap as PDF import."""
+    current = source_document.parts.aggregate(max_no=Max("sequence")).get("max_no") or 0
+    named = source_document.parts.count()
+    parts_data = []
+    for offset, item in enumerate(items, start=1):
+        sequence = current + offset
+        parts_data.append(
             {
                 "sequence": sequence,
-                "name": name or f"Part {sequence}",
-                "preview_file": preview_file,
+                "name": f"New part {named + offset}",
+                "preview_file": item["preview_file"],
                 "detected_metadata": {
                     "source": "manual",
                     "source_document_id": str(source_document.id),
                 },
             }
-        ],
+        )
+    return create_parts_from_detection(
+        source_document=source_document,
+        parts_data=parts_data,
         user=user,
     )
-    return part
+
+
+@transaction.atomic
+def delete_parts(parts: list[Part], user=None) -> int:
+    for part in parts:
+        delete_part(part, user=user)
+    return len(parts)
 
 
 @transaction.atomic
