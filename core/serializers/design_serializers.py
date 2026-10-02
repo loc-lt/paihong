@@ -275,7 +275,9 @@ class DesignFileTilesResponseSerializer(serializers.Serializer):
 
 class TileUpdateSerializer(serializers.Serializer):
     key = serializers.RegexField(regex=r"^\d+_\d+$")
-    data = serializers.CharField()
+    data = serializers.CharField(
+        help_text="base64(gzip(tile JSON)) or base64(tile JSON). Only tiles in this request are decompressed.",
+    )
 
     def validate_data(self, value):
         try:

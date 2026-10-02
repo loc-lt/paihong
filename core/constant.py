@@ -153,7 +153,7 @@ from core.services.design_files import (  # noqa: E402
     is_grid_design_file,
 )
 
-GRID_TILE_SIZE = 64
+GRID_TILE_SIZE = 256
 GRID_SNAPSHOT_SCHEMA_VERSION = 2
 
 STEP_SETTINGS_SOURCE_MANUAL = "manual"

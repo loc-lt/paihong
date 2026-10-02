@@ -565,7 +565,7 @@ Default users (seeder): `admin`, `designer`, `developer` — password `Defaultpa
 | POST   | `/api/v1/parts/{id}/steps/START_DESIGNING/files/{type}/save/`      | Staff | Design file manual save (`revision_type=2`)                                                  |
 | POST   | `/api/v1/parts/{id}/steps/START_DESIGNING/files/{type}/complete/`  | Staff | Merge tiles → official; cập nhật `progress`; complete KMO → done step 10                     |
 | GET    | `/api/v1/design_file_revisions/{id}/tiles/?x0&y0&x1&y1`            | User  | Viewport tile load (**chỉ S**)                                                               |
-| PATCH  | `/api/v1/design_file_revisions/{id}/tiles/`                        | Staff | Batch tile upload (**chỉ S**); optional `grid_width` + `grid_height` để đổi kích thước       |
+| PATCH  | `/api/v1/design_file_revisions/{id}/tiles/`                        | Staff | Batch tile upload (**chỉ S**). `data` = base64(gzip(JSON tile)) hoặc base64(JSON). Chỉ giải nén tile trong request. Optional `grid_width` + `grid_height` để đổi kích thước |
 | POST   | `/api/v1/design_file_revisions/{id}/restore/`                      | Staff | Restore design file revision                                                                 |
 | GET    | `/api/v1/colors/`                                                  | User  | System block (theo `display_order`) + custom block của user (theo `display_order`)           |
 | POST   | `/api/v1/colors/`                                                  | Staff | Tạo màu custom: `code`, `hex_value` bắt buộc; `name`, `display_order` optional               |
