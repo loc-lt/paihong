@@ -10,7 +10,9 @@ from core.services.design_files import is_grid_design_file
 from core.services.file_storage import delete_file_object_if_unreferenced, store_bytes_content
 from core.services.design_grid.color_code import normalize_color_code, paint_color_code
 from core.services.design_grid.snapshot import _load_snapshot
-from core.services.design_grid.tile_codec import decode_tile_bytes
+from core.services.design_grid.tile_codec import decode_tile_bytes, stored_tile_bytes
+
+
 def _hex_to_rgb(color_code: str) -> tuple[int, int, int]:
     normalized = normalize_color_code(color_code)
     return (
@@ -104,7 +106,7 @@ def render_snapshot_preview_png(
         if not isinstance(hex_value, str):
             continue
         try:
-            tile = decode_tile_bytes(bytes.fromhex(hex_value))
+            tile = decode_tile_bytes(stored_tile_bytes(hex_value))
         except (ValueError, TypeError):
             continue
         for key, paints in (tile.get("cells") or {}).items():

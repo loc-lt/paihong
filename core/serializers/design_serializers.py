@@ -156,13 +156,15 @@ class DesignFileRevisionSaveSerializer(serializers.Serializer):
         from core.exceptions import RevisionConflict
         from core.models import DesignFileRevision
         from core.services.design_files import is_grid_design_file
-        from core.services.design_grid.preview import refresh_design_file_revision_preview
-        from core.services.design_workspace import create_design_file_revision
+        from core.services.design_workspace import (
+            _latest_design_file_revision,
+            create_design_file_revision,
+        )
 
         user = self.context["request"].user
         layers = self.validated_data.get("layers")
         base_revision_id = self.validated_data.get("base_revision_id")
-        latest = design_file.latest_revision
+        latest = _latest_design_file_revision(design_file)
 
         if layers is not None and not is_grid_design_file(design_file.file_type):
             raise serializers.ValidationError(
@@ -176,7 +178,8 @@ class DesignFileRevisionSaveSerializer(serializers.Serializer):
 
         if base_revision_id:
             base_revision = (
-                DesignFileRevision.objects.filter(pk=base_revision_id)
+                DesignFileRevision.objects.defer("tile_manifest")
+                .filter(pk=base_revision_id)
                 .select_related("design_file")
                 .first()
             )
@@ -214,13 +217,10 @@ class DesignFileRevisionSaveSerializer(serializers.Serializer):
             design_file=design_file,
             revision_type=revision_type,
             layers=layers,
+            tile_manifest={},
             user=user,
             mark_official=mark_official,
         )
-
-        if is_grid_design_file(design_file.file_type):
-            refresh_design_file_revision_preview(revision=revision, user=user)
-
         return revision
 
 
@@ -269,14 +269,15 @@ class DesignFileTilesResponseSerializer(serializers.Serializer):
     viewport = DesignFileTilesViewportSerializer()
     tiles = serializers.DictField(
         child=serializers.CharField(),
-        help_text='Tile payload keyed by "tx_ty", values are hex-encoded tile JSON.',
+        help_text='Tile payload keyed by "tx_ty". Each value is the same string sent on PATCH.',
     )
 
 
 class TileUpdateSerializer(serializers.Serializer):
     key = serializers.RegexField(regex=r"^\d+_\d+$")
     data = serializers.CharField(
-        help_text="base64(gzip(tile JSON)) or base64(tile JSON). Only tiles in this request are decompressed.",
+        trim_whitespace=False,
+        help_text="base64(gzip(tile JSON)) or base64(tile JSON). Stored and returned unchanged.",
     )
 
     def validate_data(self, value):
@@ -319,28 +320,18 @@ class DesignFileTilesPatchSerializer(serializers.Serializer):
         return attrs
 
     def apply(self, *, revision):
-        import base64
-
-        from core.services.design_grid.preview import refresh_design_file_revision_preview
         from core.services.design_grid.snapshot import write_tiles_to_snapshot
-        from core.services.design_grid.tile_codec import (
-            decode_tile_bytes,
-            encode_tile_bytes,
-            validate_tile_bounds,
-        )
+        from core.services.design_grid.tile_codec import validate_tile_origin
 
         user = self.context["request"].user
         grid_width = self.validated_data.get("grid_width") or revision.grid_width
         grid_height = self.validated_data.get("grid_height") or revision.grid_height
-        resized = (grid_width, grid_height) != (revision.grid_width, revision.grid_height)
 
         tile_updates = {}
         for item in self.validated_data["tiles"]:
             try:
-                payload = decode_tile_bytes(base64.b64decode(item["data"]))
-                validate_tile_bounds(
+                validate_tile_origin(
                     tile_key=item["key"],
-                    payload=payload,
                     grid_width=grid_width,
                     grid_height=grid_height,
                     tile_size=GRID_TILE_SIZE,
@@ -349,7 +340,7 @@ class DesignFileTilesPatchSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     {"tiles": f"Tile {item['key']}: {exc}"}
                 ) from exc
-            tile_updates[item["key"]] = encode_tile_bytes(payload).hex()
+            tile_updates[item["key"]] = item["data"]
 
         revision.snapshot_file = write_tiles_to_snapshot(
             snapshot_file=revision.snapshot_file,
@@ -358,9 +349,7 @@ class DesignFileTilesPatchSerializer(serializers.Serializer):
             grid_width=grid_width,
             grid_height=grid_height,
         )
-        manifest = {} if resized else dict(revision.tile_manifest or {})
-        manifest.update(tile_updates)
-        revision.tile_manifest = manifest
+        revision.tile_manifest = {}
         revision.grid_width = grid_width
         revision.grid_height = grid_height
         revision.save(
@@ -372,7 +361,6 @@ class DesignFileTilesPatchSerializer(serializers.Serializer):
                 "modified",
             ]
         )
-        refresh_design_file_revision_preview(revision=revision, user=user)
         return revision
 
 
