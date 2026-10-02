@@ -65,7 +65,9 @@ patch_design_file_tiles_document = {
     "summary": "Batch-update grid tiles on a design file revision.",
     "description": (
         "Updates snapshot tiles in-place and regenerates `preview_file` "
-        "(PNG thumbnail of the current grid). Each cell paint keeps "
+        "(PNG thumbnail of the current grid). Each tile `data` is "
+        "base64(gzip(tile JSON)) or base64(tile JSON); only tiles in this "
+        "request are decompressed. Each cell paint keeps "
         "`color_code`, `order`, `is_hidden`, `is_lock`. "
         "Optional `grid_width` + `grid_height` resize this revision: all existing "
         "tiles are dropped and replaced by the tiles in this request (later PATCHes "

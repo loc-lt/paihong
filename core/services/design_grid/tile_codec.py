@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import gzip
+import io
 import json
 from typing import Any
 
@@ -85,11 +87,29 @@ def normalize_layers(layers: list | None) -> list:
     return normalized
 
 
+_GZIP_MAGIC = b"\x1f\x8b"
+_MAX_TILE_JSON_BYTES = 32 * 1024 * 1024
+
+
+def _tile_json_bytes(raw: bytes) -> bytes:
+    """Accept raw JSON or gzip(JSON). Only the bytes of this one tile are inflated."""
+    if raw[:2] != _GZIP_MAGIC:
+        return raw
+    try:
+        with gzip.GzipFile(fileobj=io.BytesIO(raw)) as gz:
+            data = gz.read(_MAX_TILE_JSON_BYTES + 1)
+    except OSError as exc:
+        raise ValueError("Tile gzip data is invalid!") from exc
+    if len(data) > _MAX_TILE_JSON_BYTES:
+        raise ValueError("Tile JSON exceeds 32 MB after decompression!")
+    return data
+
+
 def decode_tile_bytes(raw: bytes) -> dict[str, Any]:
     try:
-        payload = json.loads(raw.decode("utf-8"))
+        payload = json.loads(_tile_json_bytes(raw).decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError("Tile data must be UTF-8 JSON!") from exc
+        raise ValueError("Tile data must be UTF-8 JSON, or gzip of that JSON!") from exc
     return normalize_tile_payload(payload)
 
 
