@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import gzip
 import io
 import json
@@ -25,10 +26,9 @@ def _parse_cell_key(key: str) -> tuple[int, int]:
         raise ValueError(f"Invalid cell key: {key!r}. Expected 'x,y' integers.") from exc
 
 
-def validate_tile_bounds(
+def validate_tile_origin(
     *,
     tile_key: str,
-    payload: dict[str, Any],
     grid_width: int,
     grid_height: int,
     tile_size: int,
@@ -39,6 +39,22 @@ def validate_tile_bounds(
         raise ValueError(
             f"Tile {tile_key} is outside the {grid_width}x{grid_height} grid!"
         )
+
+
+def validate_tile_bounds(
+    *,
+    tile_key: str,
+    payload: dict[str, Any],
+    grid_width: int,
+    grid_height: int,
+    tile_size: int,
+) -> None:
+    validate_tile_origin(
+        tile_key=tile_key,
+        grid_width=grid_width,
+        grid_height=grid_height,
+        tile_size=tile_size,
+    )
     for key in payload.get("cells") or {}:
         x, y = _parse_cell_key(key)
         if not (0 <= x < grid_width and 0 <= y < grid_height):
@@ -116,6 +132,16 @@ def decode_tile_bytes(raw: bytes) -> dict[str, Any]:
 def encode_tile_bytes(payload: dict[str, Any]) -> bytes:
     normalized = normalize_tile_payload(payload)
     return json.dumps(normalized, separators=(",", ":")).encode("utf-8")
+
+
+_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+
+
+def stored_tile_bytes(value: str) -> bytes:
+    """Bytes of a snapshot tile. New values are base64; older values are hex."""
+    if value and len(value) % 2 == 0 and all(char in _HEX_DIGITS for char in value):
+        return bytes.fromhex(value)
+    return base64.b64decode(value)
 
 
 def normalize_tile_update_bytes(raw: bytes) -> bytes:

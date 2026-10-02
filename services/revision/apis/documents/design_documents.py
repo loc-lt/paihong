@@ -23,8 +23,9 @@ design_file_autosave_document = {
     "summary": "Autosave design file revision.",
     "description": (
         "Creates a new DesignFileRevision row for layer-panel metadata (`layers[]`). "
-        "Cell paint data is uploaded separately via PATCH "
-        "/design_file_revisions/{id}/tiles (in-place on the same revision row)."
+        "Reuses the previous snapshot and preview. Does not read `tile_manifest` and "
+        "does not repaint the grid. Cell paint data is uploaded separately via PATCH "
+        "/design_file_revisions/{id}/tiles."
     ),
     "parameters": [UUID_PATH_PARAM],
     "request": DesignFileRevisionSaveSerializer,
@@ -40,8 +41,10 @@ design_file_save_document = {
 }
 
 design_file_complete_document = {
-    "summary": "Complete design file — merge tiles and mark progress.",
+    "summary": "Complete design file and mark progress.",
     "description": (
+        "Marks the latest revision official and updates workspace progress. "
+        "Does not merge tiles, read `tile_manifest`, or repaint `preview_file`. "
         "Requires all prior files in DESIGN_FILE_SEQUENCE to be completed first "
         "(e.g. complete S1 before C). Opening/editing files is not blocked — only "
         "this complete action enforces order."
@@ -54,7 +57,8 @@ get_design_file_tiles_document = {
     "summary": "Load grid tiles for a viewport.",
     "description": (
         "Returns tiles intersecting the viewport rectangle `[x0, x1) × [y0, y1)` "
-        "in grid pixel coordinates. Tile keys use format `tx_ty` where "
+        "in grid pixel coordinates. Each value is the same `data` string stored by PATCH. "
+        "Tile keys use format `tx_ty` where "
         "`tx = floor(x / tile_size)` and `ty = floor(y / tile_size)`."
     ),
     "parameters": [UUID_PATH_PARAM, *TILE_VIEWPORT_QUERY_PARAMS],
@@ -64,15 +68,13 @@ get_design_file_tiles_document = {
 patch_design_file_tiles_document = {
     "summary": "Batch-update grid tiles on a design file revision.",
     "description": (
-        "Updates snapshot tiles in-place and regenerates `preview_file` "
-        "(PNG thumbnail of the current grid). Each tile `data` is "
-        "base64(gzip(tile JSON)) or base64(tile JSON); only tiles in this "
-        "request are decompressed. Each cell paint keeps "
-        "`color_code`, `order`, `is_hidden`, `is_lock`. "
+        "Stores each tile `data` string unchanged (base64 of gzip JSON, or base64 of JSON). "
+        "Does not decompress tiles, does not write `tile_manifest`, and does not "
+        "regenerate `preview_file`. "
         "Optional `grid_width` + `grid_height` resize this revision: all existing "
         "tiles are dropped and replaced by the tiles in this request (later PATCHes "
         "with the same size merge as usual). BUILD_GRID only sets the size of the "
-        "first S revision. Tiles and cells outside the grid are rejected (400)."
+        "first S revision. A tile key outside the grid is rejected (400)."
     ),
     "parameters": [UUID_PATH_PARAM],
     "request": DesignFileTilesPatchSerializer,

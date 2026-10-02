@@ -11,7 +11,7 @@ from core.serializers.file_serializers import FileObjectSerializer
 from core.serializers.revision_serializers import validate_revision_upload
 from core.serializers.source_document_serializers import SourceDocumentSerializer
 from core.services.file_storage import delete_file_object_if_unreferenced, store_uploaded_file
-from core.services.part_manage import create_manual_part
+from core.services.part_manage import create_manual_parts
 
 
 class PartSerializer(serializers.ModelSerializer):
@@ -69,7 +69,7 @@ def _validate_preview_upload(value):
     return value
 
 
-class CreatePartSerializer(serializers.Serializer):
+class BulkCreatePartSerializer(serializers.Serializer):
     source_document_id = serializers.PrimaryKeyRelatedField(
         queryset=SourceDocument.objects.all(),
         source="source_document",
@@ -80,41 +80,66 @@ class CreatePartSerializer(serializers.Serializer):
             "incorrect_type": "Invalid source document ID format!",
         },
     )
-    name = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        allow_null=True,
-        max_length=255,
-        trim_whitespace=True,
+    previews = serializers.ListField(
+        child=serializers.FileField(
+            error_messages={
+                "invalid": "Each preview must be a file!",
+                "empty": "Preview image cannot be empty!",
+                "no_name": "Each preview must be a file!",
+            },
+        ),
+        allow_empty=False,
+        help_text="One or more preview images (SVG recommended; PNG, JPG, JPEG also accepted).",
         error_messages={
-            "invalid": "Part name must be a string!",
-            "max_length": "Part name cannot exceed 255 characters!",
-        },
-    )
-    preview = serializers.FileField(
-        write_only=True,
-        help_text="Part preview image (SVG recommended; PNG, JPG, JPEG also accepted).",
-        error_messages={
-            "required": "Preview image is required!",
-            "null": "Preview image is required!",
-            "empty": "Preview image cannot be empty!",
+            "required": "At least one preview image is required!",
+            "null": "At least one preview image is required!",
+            "empty": "At least one preview image is required!",
+            "not_a_list": "Previews must be a list of files!",
+            "invalid": "Previews must be a list of files!",
         },
     )
 
-    def validate_name(self, value):
-        return coerce_optional_string(value)
-
-    def validate_preview(self, value):
-        return _validate_preview_upload(value)
+    def validate(self, attrs):
+        previews = []
+        for preview in attrs.get("previews") or []:
+            previews.append(_validate_preview_upload(preview))
+        attrs["previews"] = previews
+        return attrs
 
     def create(self, validated_data):
         user = self.context["request"].user
-        return create_manual_part(
+        items = [
+            {"preview_file": store_uploaded_file(preview, created_by=user)}
+            for preview in validated_data["previews"]
+        ]
+        return create_manual_parts(
             source_document=validated_data["source_document"],
-            preview_file=store_uploaded_file(validated_data["preview"], created_by=user),
-            name=validated_data.get("name") or "",
+            items=items,
             user=user,
         )
+
+
+class BulkDeletePartSerializer(serializers.Serializer):
+    ids = serializers.ListField(
+        child=serializers.UUIDField(
+            error_messages={"invalid": "Invalid part ID format!"},
+        ),
+        allow_empty=False,
+        error_messages={
+            "required": "Part IDs are required!",
+            "null": "Part IDs are required!",
+            "empty": "At least one part ID is required!",
+            "not_a_list": "Part IDs must be a list!",
+            "invalid": "Part IDs must be a list!",
+        },
+    )
+
+    def validate_ids(self, value):
+        unique_ids = list(dict.fromkeys(value))
+        found = set(Part.objects.filter(pk__in=unique_ids).values_list("pk", flat=True))
+        if any(part_id not in found for part_id in unique_ids):
+            raise serializers.ValidationError("Part not found!")
+        return unique_ids
 
 
 class UpdatePartSerializer(serializers.ModelSerializer):

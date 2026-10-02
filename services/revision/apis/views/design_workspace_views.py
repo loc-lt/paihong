@@ -19,7 +19,10 @@ from core.serializers.design_serializers import (
     validate_design_file_type,
 )
 from core.services.design_grid.snapshot import read_tiles_from_snapshot
-from core.services.design_workspace import get_or_create_workspace
+from core.services.design_workspace import (
+    _latest_design_file_revision,
+    get_or_create_workspace,
+)
 from core.utils import get_instance, global_response_errors
 
 from ..documents.design_documents import (
@@ -107,9 +110,11 @@ class DesignWorkspaceViewSet(viewsets.ViewSet):
         part = get_instance(Part, pk)
         part_step = self._get_designing_part_step(part)
         design_file = self._get_design_file(part_step, file_type)
-        revisions = design_file.revisions.select_related(
-            "snapshot_file", "preview_file", "created_by"
-        ).order_by("-revision_no")
+        revisions = (
+            design_file.revisions.defer("tile_manifest")
+            .select_related("snapshot_file", "preview_file", "created_by")
+            .order_by("-revision_no")
+        )
         return success_response(
             DesignFileRevisionDetailSerializer(revisions, many=True).data,
             "Design file revisions retrieved successfully!",
@@ -156,7 +161,7 @@ class DesignWorkspaceViewSet(viewsets.ViewSet):
         part = get_instance(Part, pk)
         part_step = self._get_designing_part_step(part)
         design_file = self._get_design_file(part_step, file_type)
-        revision = design_file.latest_revision
+        revision = _latest_design_file_revision(design_file)
         if request.data:
             serializer = DesignFileRevisionSaveSerializer(
                 data=request.data,
@@ -252,8 +257,6 @@ class DesignFileRevisionViewSet(viewsets.ViewSet):
         y0 = query.validated_data["y0"]
         x1 = query.validated_data.get("x1") or revision.grid_width
         y1 = query.validated_data.get("y1") or revision.grid_height
-        from core.services.design_grid.tile_codec import normalize_tile_update_bytes
-
         tiles = read_tiles_from_snapshot(
             snapshot_file=revision.snapshot_file,
             x0=x0,
@@ -261,14 +264,6 @@ class DesignFileRevisionViewSet(viewsets.ViewSet):
             x1=x1,
             y1=y1,
         )
-        normalized_tiles = {}
-        for key, hex_value in tiles.items():
-            try:
-                normalized_tiles[key] = normalize_tile_update_bytes(
-                    bytes.fromhex(hex_value)
-                ).hex()
-            except (ValueError, TypeError):
-                normalized_tiles[key] = hex_value
         return success_response(
             {
                 "revision_id": str(revision.id),
@@ -277,7 +272,7 @@ class DesignFileRevisionViewSet(viewsets.ViewSet):
                 "grid_width": revision.grid_width,
                 "grid_height": revision.grid_height,
                 "viewport": {"x0": x0, "y0": y0, "x1": x1, "y1": y1},
-                "tiles": normalized_tiles,
+                "tiles": tiles,
             },
             "Tiles retrieved successfully!",
         )

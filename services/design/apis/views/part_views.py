@@ -1,3 +1,4 @@
+from drf_spectacular.openapi import AutoSchema
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -8,12 +9,13 @@ from core.paginators import CustomPaginator
 from core.permissions import require_design
 from core.responses import success_response
 from core.serializers.part_serializers import (
-    CreatePartSerializer,
+    BulkCreatePartSerializer,
+    BulkDeletePartSerializer,
     PartDetailSerializer,
     PartSerializer,
     UpdatePartSerializer,
 )
-from core.services.part_manage import delete_part
+from core.services.part_manage import delete_parts
 from core.utils import get_instance, global_response_errors
 
 from ..documents.part_documents import (
@@ -25,26 +27,53 @@ from ..documents.part_documents import (
 )
 
 
-def _part_detail_response(part, message, status_code=status.HTTP_200_OK):
-    part = Part.objects.select_related(
+class PartSchema(AutoSchema):
+    """Spectacular drops request bodies on DELETE. Bulk delete needs one."""
+
+    def _get_request_body(self, direction="request"):
+        if self.method != "DELETE":
+            return super()._get_request_body(direction)
+        saved_method = self.method
+        self.method = "POST"
+        try:
+            return super()._get_request_body(direction)
+        finally:
+            self.method = saved_method
+
+
+def _load_part_details(parts):
+    ids = [part.pk for part in parts]
+    rows = Part.objects.select_related(
         "preview_file",
         "source_document__file",
         "source_document__svg_file",
-    ).get(pk=part.pk)
-    return success_response(PartDetailSerializer(part).data, message, status_code)
+    ).filter(pk__in=ids)
+    by_id = {row.pk: row for row in rows}
+    return [by_id[part_id] for part_id in ids]
+
+
+def _part_detail_response(part, message, status_code=status.HTTP_200_OK):
+    return success_response(
+        PartDetailSerializer(_load_part_details([part])[0]).data,
+        message,
+        status_code,
+    )
 
 
 class PartViewSet(viewsets.ViewSet):
+    schema = PartSchema()
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     @extend_schema(**create_part_document)
     def create(self, request):
         require_design(request.user)
-        serializer = CreatePartSerializer(data=request.data, context={"request": request})
+        serializer = BulkCreatePartSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
-            part = serializer.save()
-            return _part_detail_response(
-                part, "Part created successfully!", status.HTTP_201_CREATED
+            parts = serializer.save()
+            return success_response(
+                PartDetailSerializer(_load_part_details(parts), many=True).data,
+                "Parts created successfully!",
+                status.HTTP_201_CREATED,
             )
         return global_response_errors(serializer.errors)
 
@@ -69,11 +98,17 @@ class PartViewSet(viewsets.ViewSet):
         return global_response_errors(serializer.errors)
 
     @extend_schema(**delete_part_document)
-    def destroy(self, request, pk=None):
+    def bulk_destroy(self, request):
         require_design(request.user)
-        part = get_instance(Part, pk)
-        delete_part(part, user=request.user)
-        return success_response(None, "Part deleted successfully!")
+        serializer = BulkDeletePartSerializer(data=request.data)
+        if not serializer.is_valid():
+            return global_response_errors(serializer.errors)
+        parts = list(Part.objects.filter(pk__in=serializer.validated_data["ids"]))
+        delete_parts(parts, user=request.user)
+        return success_response(
+            {"deleted_count": len(parts)},
+            "Parts deleted successfully!",
+        )
 
 
 class SourceDocumentPartViewSet(viewsets.ViewSet):

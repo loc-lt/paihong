@@ -13,11 +13,9 @@ from core.models import (
 )
 from core.services.design_files import (
     DESIGN_FILE_SEQUENCE,
-    is_grid_design_file,
     validate_design_file_complete_order,
 )
 from core.services.design_grid.preview import refresh_design_file_revision_preview
-from core.services.design_grid.snapshot import merge_tiles_into_snapshot
 from core.services.file_storage import delete_file_object_if_unreferenced
 
 def _delete_file_objects(file_object_ids: set) -> None:
@@ -70,6 +68,17 @@ def _ensure_design_files(workspace: DesignWorkspace, user=None) -> None:
             file_type=file_type,
             updated_by=user,
         )
+
+
+def _latest_design_file_revision(design_file: DesignFile):
+    """Latest revision without tile_manifest. That column can be tens of MB."""
+    if not design_file.latest_revision_id:
+        return None
+    return (
+        DesignFileRevision.objects.defer("tile_manifest")
+        .filter(pk=design_file.latest_revision_id)
+        .first()
+    )
 
 
 def _create_s_grid_revision(
@@ -168,7 +177,7 @@ def create_design_file_revision(
     parent_revision=None,
     mark_official: bool = False,
 ) -> DesignFileRevision:
-    latest = design_file.latest_revision
+    latest = _latest_design_file_revision(design_file)
     next_no = (latest.revision_no + 1) if latest else 1
     if snapshot_file is None and latest:
         snapshot_file = latest.snapshot_file
@@ -180,9 +189,7 @@ def create_design_file_revision(
         layers = latest.layers
     if preview_file is None and latest:
         preview_file = latest.preview_file
-    if tile_manifest is None and latest:
-        tile_manifest = dict(latest.tile_manifest or {})
-    elif tile_manifest is None:
+    if tile_manifest is None:
         tile_manifest = {}
 
     if snapshot_file is None:
@@ -239,21 +246,8 @@ def complete_design_file_revision(
         file_type=design_file.file_type,
     )
     revision.revision_type = RevisionTypeEnum.OFFICIAL.value
-    update_fields = ["revision_type", "modified"]
-    if is_grid_design_file(design_file.file_type):
-        merged_snapshot = merge_tiles_into_snapshot(
-            snapshot_file=revision.snapshot_file,
-            tile_manifest=revision.tile_manifest or {},
-            created_by=user,
-        )
-        revision.snapshot_file = merged_snapshot
-        revision.tile_manifest = {}
-        update_fields.extend(["snapshot_file", "tile_manifest"])
-    else:
-        revision.tile_manifest = {}
-        update_fields.append("tile_manifest")
-    revision.save(update_fields=update_fields)
-    refresh_design_file_revision_preview(revision=revision, user=user)
+    revision.tile_manifest = {}
+    revision.save(update_fields=["revision_type", "tile_manifest", "modified"])
 
     design_file.official_revision = revision
     design_file.latest_revision = revision
