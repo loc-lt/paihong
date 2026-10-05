@@ -607,6 +607,8 @@ class DesignFile(TimeStampedModel):
         blank=False,
     )
     file_type = models.CharField(max_length=10, null=False, blank=False, db_index=True)
+    name = models.CharField(max_length=255, null=False, blank=True, default="")
+    is_draft = models.BooleanField(default=False, null=False, blank=False)
     latest_revision = models.ForeignKey(
         "DesignFileRevision",
         null=True,

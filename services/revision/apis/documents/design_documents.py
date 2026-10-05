@@ -1,6 +1,10 @@
+from drf_spectacular.utils import OpenApiResponse
+
 from core.openapi_params import TILE_VIEWPORT_QUERY_PARAMS, UUID_PATH_PARAM
 from core.serializers.design_serializers import (
+    CreateDraftDesignFileSerializer,
     DesignFileRevisionDetailSerializer,
+    DesignFileSerializer,
     DesignFileTilesPatchSerializer,
     DesignFileTilesResponseSerializer,
     DesignFileRevisionSaveSerializer,
@@ -19,13 +23,38 @@ get_design_file_document = {
     "responses": {200: DesignFileRevisionDetailSerializer},
 }
 
+create_draft_design_file_document = {
+    "summary": "Add a draft file to the design workspace.",
+    "description": (
+        "JSON body: optional `name` (default `Draft {n}`). Creates an empty grid file "
+        "(`file_type` `D1`, `D2`, …) with revision 1, same canvas size as "
+        "`workspace.settings.grid`. Paint with PATCH tiles and save layers the same way "
+        "as file S. Saving or completing a draft does not check earlier main files and "
+        "does not change main-file progress."
+    ),
+    "parameters": [UUID_PATH_PARAM],
+    "request": CreateDraftDesignFileSerializer,
+    "responses": {201: DesignFileSerializer},
+}
+
+delete_draft_design_file_document = {
+    "summary": "Delete a draft file.",
+    "description": (
+        "Deletes the draft and all of its revisions. Main files S–KMO cannot be deleted. "
+        "Path `file_type` is the draft code (`D1`, `D2`, …)."
+    ),
+    "parameters": [UUID_PATH_PARAM],
+    "responses": {200: OpenApiResponse(description="Deleted")},
+}
+
 design_file_autosave_document = {
     "summary": "Autosave design file revision.",
     "description": (
         "Creates a new DesignFileRevision row for layer-panel metadata (`layers[]`). "
         "Reuses the previous snapshot and preview. Does not read `tile_manifest` and "
         "does not repaint the grid. Cell paint data is uploaded separately via PATCH "
-        "/design_file_revisions/{id}/tiles."
+        "/design_file_revisions/{id}/tiles. Draft files (`D1`, `D2`, …) use the same "
+        "layers and tiles APIs. Draft saves do not require earlier main files to be complete."
     ),
     "parameters": [UUID_PATH_PARAM],
     "request": DesignFileRevisionSaveSerializer,
@@ -43,11 +72,10 @@ design_file_save_document = {
 design_file_complete_document = {
     "summary": "Complete design file and mark progress.",
     "description": (
-        "Marks the latest revision official and updates workspace progress. "
-        "Does not merge tiles, read `tile_manifest`, or repaint `preview_file`. "
-        "Requires all prior files in DESIGN_FILE_SEQUENCE to be completed first "
-        "(e.g. complete S1 before C). Opening/editing files is not blocked — only "
-        "this complete action enforces order."
+        "Marks the latest revision official. For main files S–KMO, updates workspace "
+        "progress and requires prior files to be done (e.g. complete S1 before C). "
+        "Draft files (`D1`, `D2`, …) skip that order check and do not change main-file "
+        "progress. Does not merge tiles, read `tile_manifest`, or repaint `preview_file`."
     ),
     "parameters": [UUID_PATH_PARAM],
     "responses": {201: DesignFileRevisionDetailSerializer},
