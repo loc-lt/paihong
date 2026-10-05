@@ -68,6 +68,8 @@ class DesignFileSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "file_type",
+            "name",
+            "is_draft",
             "display_name",
             "has_grid",
             "latest_revision",
@@ -83,7 +85,11 @@ class DesignFileSerializer(serializers.ModelSerializer):
             part_step = getattr(obj.workspace, "part_step", None)
             if part_step:
                 product_code = part_step.part.work_item.item_code
-        return build_design_file_display_name(product_code or "", obj.file_type)
+        return build_design_file_display_name(
+            product_code or "",
+            obj.file_type,
+            name=obj.name if obj.is_draft else "",
+        )
 
     def get_has_grid(self, obj):
         from core.services.design_files import is_grid_design_file
@@ -114,7 +120,17 @@ class DesignWorkspaceSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         product_code = instance.part_step.part.work_item.item_code
         self.fields["files"].context["product_code"] = product_code
-        return super().to_representation(instance)
+        data = super().to_representation(instance)
+        order = {file_type: index for index, file_type in enumerate(DESIGN_FILE_SEQUENCE)}
+        data["files"] = sorted(
+            data["files"],
+            key=lambda item: (
+                1 if item.get("is_draft") else 0,
+                order.get(item.get("file_type"), len(order)),
+                item.get("file_type") or "",
+            ),
+        )
+        return data
 
 
 class DesignLayerSerializer(serializers.Serializer):
@@ -125,6 +141,35 @@ class DesignLayerSerializer(serializers.Serializer):
     z_order = serializers.IntegerField(required=False, min_value=1)
     is_hidden = serializers.BooleanField(required=False, default=False)
     is_lock = serializers.BooleanField(required=False, default=False)
+
+
+class CreateDraftDesignFileSerializer(serializers.Serializer):
+    name = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        max_length=255,
+        trim_whitespace=True,
+        error_messages={
+            "invalid": "Draft name must be a string!",
+            "max_length": "Draft name cannot exceed 255 characters!",
+            "null": "Draft name must be a string!",
+        },
+    )
+
+    def validate_name(self, value):
+        from core.serializers.fields import coerce_optional_string
+
+        return coerce_optional_string(value) or ""
+
+    def create(self, validated_data):
+        from core.services.design_workspace import create_draft_design_file
+
+        return create_draft_design_file(
+            workspace=self.context["workspace"],
+            name=validated_data.get("name") or "",
+            user=self.context["request"].user,
+        )
 
 
 class DesignFileRevisionSaveSerializer(serializers.Serializer):

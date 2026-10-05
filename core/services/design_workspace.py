@@ -56,7 +56,73 @@ def _clear_design_workspace_revisions(
         )
         design_file.revisions.all().delete()
 
+    workspace.files.filter(is_draft=True).delete()
     _delete_file_objects(file_object_ids - (keep_file_object_ids or set()))
+
+def _next_draft_number(workspace: DesignWorkspace) -> int:
+    numbers = []
+    for file_type in workspace.files.filter(is_draft=True).values_list("file_type", flat=True):
+        suffix = file_type[1:]
+        if file_type.startswith("D") and suffix.isdigit():
+            numbers.append(int(suffix))
+    return max(numbers, default=0) + 1
+
+
+@transaction.atomic
+def create_draft_design_file(
+    *,
+    workspace: DesignWorkspace,
+    name: str,
+    user=None,
+) -> DesignFile:
+    from core.services.design_grid.snapshot import create_empty_grid_snapshot
+
+    number = _next_draft_number(workspace)
+    grid = (workspace.settings or {}).get("grid") or {}
+    width = int(grid.get("width") or 0)
+    height = int(grid.get("height") or 0)
+    snapshot_file = create_empty_grid_snapshot(
+        width=width,
+        height=height,
+        created_by=user,
+    )
+    design_file = DesignFile.objects.create(
+        workspace=workspace,
+        file_type=f"D{number}",
+        name=name or f"Draft {number}",
+        is_draft=True,
+        updated_by=user,
+    )
+    revision = create_design_file_revision(
+        design_file=design_file,
+        revision_type=RevisionTypeEnum.MANUAL.value,
+        grid_width=width,
+        grid_height=height,
+        snapshot_file=snapshot_file,
+        tile_manifest={},
+        user=user,
+    )
+    if width > 0 and height > 0:
+        refresh_design_file_revision_preview(revision=revision, user=user)
+    return design_file
+
+
+@transaction.atomic
+def delete_draft_design_file(design_file: DesignFile, user=None) -> None:
+    from rest_framework.exceptions import ValidationError
+
+    if not design_file.is_draft:
+        raise ValidationError({"file_type": "Only draft files can be deleted!"})
+    revisions = list(design_file.revisions.all())
+    file_object_ids = _collect_revision_file_object_ids(revisions)
+    DesignFile.objects.filter(pk=design_file.pk).update(
+        latest_revision=None,
+        official_revision=None,
+    )
+    design_file.revisions.all().delete()
+    design_file.delete()
+    _delete_file_objects(file_object_ids)
+
 
 def _ensure_design_files(workspace: DesignWorkspace, user=None) -> None:
     existing = set(workspace.files.values_list("file_type", flat=True))
@@ -222,14 +288,15 @@ def create_design_file_revision(
     if mark_official:
         design_file.official_revision = revision
         update_fields.append("official_revision")
-        workspace = design_file.workspace
-        progress = dict((workspace.settings or {}).get("progress") or {})
-        progress[design_file.file_type] = "done"
-        workspace.settings = {
-            **(workspace.settings or {}),
-            "progress": progress,
-        }
-        workspace.save(update_fields=["settings", "modified"])
+        if not design_file.is_draft:
+            workspace = design_file.workspace
+            progress = dict((workspace.settings or {}).get("progress") or {})
+            progress[design_file.file_type] = "done"
+            workspace.settings = {
+                **(workspace.settings or {}),
+                "progress": progress,
+            }
+            workspace.save(update_fields=["settings", "modified"])
     design_file.updated_by = user
     design_file.save(update_fields=update_fields)
     return revision
@@ -241,10 +308,11 @@ def complete_design_file_revision(
     user=None,
 ) -> DesignFileRevision:
     design_file = revision.design_file
-    validate_design_file_complete_order(
-        workspace=design_file.workspace,
-        file_type=design_file.file_type,
-    )
+    if not design_file.is_draft:
+        validate_design_file_complete_order(
+            workspace=design_file.workspace,
+            file_type=design_file.file_type,
+        )
     revision.revision_type = RevisionTypeEnum.OFFICIAL.value
     revision.tile_manifest = {}
     revision.save(update_fields=["revision_type", "tile_manifest", "modified"])
@@ -253,6 +321,9 @@ def complete_design_file_revision(
     design_file.latest_revision = revision
     design_file.updated_by = user
     design_file.save(update_fields=["official_revision", "latest_revision", "updated_by", "modified"])
+
+    if design_file.is_draft:
+        return revision
 
     workspace = design_file.workspace
     progress = dict((workspace.settings or {}).get("progress") or {})

@@ -2,6 +2,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 
 from core.constant import GRID_SNAPSHOT_SCHEMA_VERSION, GRID_TILE_SIZE, RevisionTypeEnum
 from core.exceptions import RevisionConflict
@@ -10,7 +11,9 @@ from core.permissions import require_design
 from core.responses import revision_conflict_response, success_response
 from core.serializers.design_serializers import (
     CompleteDesignFileRevisionSerializer,
+    CreateDraftDesignFileSerializer,
     DesignFileRevisionDetailSerializer,
+    DesignFileSerializer,
     DesignFileRevisionSaveSerializer,
     DesignFileTilesPatchSerializer,
     DesignFileTilesQuerySerializer,
@@ -21,11 +24,14 @@ from core.serializers.design_serializers import (
 from core.services.design_grid.snapshot import read_tiles_from_snapshot
 from core.services.design_workspace import (
     _latest_design_file_revision,
+    delete_draft_design_file,
     get_or_create_workspace,
 )
 from core.utils import get_instance, global_response_errors
 
 from ..documents.design_documents import (
+    create_draft_design_file_document,
+    delete_draft_design_file_document,
     design_file_autosave_document,
     design_file_complete_document,
     design_file_save_document,
@@ -38,6 +44,7 @@ from ..documents.design_documents import (
 
 class DesignWorkspaceViewSet(viewsets.ViewSet):
     STEP_CODE = "START_DESIGNING"
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def _get_designing_part_step(self, part: Part) -> PartStep:
         step = WorkflowStepDefinition.objects.filter(code=self.STEP_CODE).first()
@@ -49,11 +56,12 @@ class DesignWorkspaceViewSet(viewsets.ViewSet):
             raise NotFound("Part step not found!")
 
     def _get_design_file(self, part_step: PartStep, file_type: str) -> DesignFile:
-        validate_design_file_type(file_type)
         workspace = get_or_create_workspace(part_step, user=None)
         design_file = workspace.files.filter(file_type=file_type).first()
         if not design_file:
             raise NotFound("Design file not found!")
+        if not design_file.is_draft:
+            validate_design_file_type(file_type)
         return design_file
 
     @extend_schema(**get_design_workspace_document)
@@ -119,6 +127,54 @@ class DesignWorkspaceViewSet(viewsets.ViewSet):
             DesignFileRevisionDetailSerializer(revisions, many=True).data,
             "Design file revisions retrieved successfully!",
         )
+
+    @extend_schema(**create_draft_design_file_document)
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"steps/START_DESIGNING/drafts",
+    )
+    def create_draft(self, request, pk=None):
+        require_design(request.user)
+        part = get_instance(Part, pk)
+        part_step = self._get_designing_part_step(part)
+        workspace = get_or_create_workspace(part_step, user=request.user)
+        serializer = CreateDraftDesignFileSerializer(
+            data=request.data,
+            context={"request": request, "workspace": workspace},
+        )
+        if not serializer.is_valid():
+            return global_response_errors(serializer.errors)
+        design_file = serializer.save()
+        design_file = (
+            DesignFile.objects.select_related(
+                "workspace__part_step__part__source_document__work_item",
+                "latest_revision",
+                "official_revision",
+            ).get(pk=design_file.pk)
+        )
+        return success_response(
+            DesignFileSerializer(design_file).data,
+            "Draft file created successfully!",
+            status.HTTP_201_CREATED,
+        )
+
+    @extend_schema(**delete_draft_design_file_document)
+    @action(
+        detail=True,
+        methods=["delete"],
+        url_path=r"steps/START_DESIGNING/drafts/(?P<file_type>[^/.]+)",
+    )
+    def delete_draft(self, request, pk=None, file_type=None):
+        require_design(request.user)
+        part = get_instance(Part, pk)
+        part_step = self._get_designing_part_step(part)
+        design_file = self._get_design_file(part_step, file_type)
+        try:
+            delete_draft_design_file(design_file, user=request.user)
+        except ValidationError as exc:
+            return global_response_errors(exc.detail)
+        return success_response(None, "Draft file deleted successfully!")
 
     @extend_schema(**design_file_autosave_document)
     @action(
@@ -236,7 +292,7 @@ class DesignFileRevisionViewSet(viewsets.ViewSet):
 
             if not is_grid_design_file(revision.design_file.file_type):
                 return global_response_errors(
-                    {"file_type": "Grid tiles API is only available for S!"}
+                    {"file_type": "Grid tiles API is only available for grid files!"}
                 )
             serializer = DesignFileTilesPatchSerializer(
                 data=request.data,
