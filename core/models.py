@@ -7,7 +7,9 @@ from django_softdelete.models import SoftDeleteModel
 
 from core.constant import (
     PartStatusEnum,
+    JacquardEnum,
     RevisionTypeEnum,
+    WeavingMachineTypeEnum,
     SourceDocumentStatusEnum,
     StepStatusEnum,
     StorageBackendEnum,
@@ -755,6 +757,104 @@ class UserColorPreference(TimeStampedModel):
 
     def __str__(self):
         return f"{self.user} - {self.code} {self.custom_name or self.custom_hex}"
+
+
+class WeavingMachine(TimeStampedModel):
+    """Machine name. max_bars and the barre rows belong to the name, not to a width."""
+
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
+    name = models.CharField(max_length=100, unique=True, null=False, blank=False)
+    type = models.CharField(
+        max_length=10,
+        choices=WeavingMachineTypeEnum.choices,
+        default=WeavingMachineTypeEnum.SINGLE,
+        null=False,
+        blank=False,
+    )
+    jacquard = models.PositiveSmallIntegerField(
+        choices=JacquardEnum.choices,
+        default=JacquardEnum.ONE,
+        null=False,
+        blank=False,
+    )
+    max_bars = models.PositiveIntegerField(null=False, blank=False, default=0)
+
+    class Meta:
+        db_table = "weaving_machine"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class WeavingMachineSpec(TimeStampedModel):
+    """One allowed trio: machine name + gauge (n/inch) + width."""
+
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
+    machine = models.ForeignKey(
+        WeavingMachine,
+        related_name="specs",
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+    )
+    needles_per_inch = models.DecimalField(
+        max_digits=8, decimal_places=2, null=False, blank=False
+    )
+    width = models.DecimalField(max_digits=8, decimal_places=2, null=False, blank=False)
+
+    class Meta:
+        db_table = "weaving_machine_spec"
+        ordering = ["needles_per_inch", "width"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["machine", "needles_per_inch", "width"],
+                name="uq_weaving_machine_spec",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.machine} {self.needles_per_inch} n/inch {self.width}"
+
+
+class WeavingMachineBar(TimeStampedModel):
+    """One barre of a machine name. Row count follows max_bars."""
+
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
+    machine = models.ForeignKey(
+        WeavingMachine,
+        related_name="bars",
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+    )
+    bar_no = models.PositiveIntegerField(null=False, blank=False)
+    bar_code = models.CharField(max_length=20, null=False, blank=False)
+    zul_max_kg = models.DecimalField(
+        max_digits=8, decimal_places=2, null=False, blank=False, default=0
+    )
+    max_versatzsprung = models.IntegerField(null=False, blank=False, default=0)
+    max_ueberlegungssprung = models.IntegerField(null=False, blank=False, default=0)
+    ns = models.PositiveIntegerField(null=False, blank=False, default=0)
+
+    class Meta:
+        db_table = "weaving_machine_bar"
+        ordering = ["bar_no"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["machine", "bar_no"],
+                name="uq_weaving_machine_bar_no",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.machine} bar {self.bar_no}"
 
 
 class Notification(TimeStampedModel):

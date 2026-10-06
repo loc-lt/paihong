@@ -7,6 +7,9 @@ from .views import (
     SourceDocumentPartViewSet,
     SourceDocumentViewSet,
     SystemColorViewSet,
+    WeavingMachineBarViewSet,
+    WeavingMachineSpecViewSet,
+    WeavingMachineViewSet,
     WorkItemViewSet,
     WorkflowStepDefinitionViewSet,
     WorkflowTemplateViewSet,
@@ -44,6 +47,13 @@ router.register(r"v1/workflow_templates", WorkflowTemplateViewSet, basename="wor
 router.register(r"v1/workflow_steps", WorkflowStepDefinitionViewSet, basename="workflow-step")
 router.register(r"v1/colors", ColorViewSet, basename="color")
 router.register(r"v1/system_colors", SystemColorViewSet, basename="system-color")
+router.register(r"v1/weaving_machines", WeavingMachineViewSet, basename="weaving-machine")
+router.register(
+    r"v1/weaving_machine_specs",
+    WeavingMachineSpecViewSet,
+    basename="weaving-machine-spec",
+)
+router.register(r"v1/weaving_machine_bars", WeavingMachineBarViewSet, basename="weaving-machine-bar")
 
 urlpatterns = [
     path("", include(router.urls)),

@@ -542,6 +542,21 @@ Default users (seeder): `admin`, `designer`, `developer` — password `Defaultpa
 | PATCH  | `/api/v1/workflow_steps/{id}/`                | Staff |                                                                                        |
 
 
+**Máy dệt** (`design_service`). Chỉ lưu catalog ô xám liên kết với nhau. Hai bảng:
+
+1. `weaving_machine` — `name`, `type` (`Single` hoặc `Double`), `jacquard` (`1` hoặc `2`), `max_bars`, và các dòng barre (`bar_no`, `bar_code`, `zul_max_kg`, `max_versatzsprung`, `max_ueberlegungssprung`, `ns` là số cơ). `max_bars` và bảng barre theo **machine name**, không theo width.
+2. `weaving_machine_spec` — một dòng là một bộ ba `machine` + `needles_per_inch` (n/inch) + `width`.
+
+FE: chọn name → các gauge là `needles_per_inch` phân biệt trong spec của máy đó → chọn gauge → các `width` của cặp name+gauge → chọn width là xong bộ ba. Màn barre đọc `max_bars` và `bars` của machine name. Chu kỳ chain-link khi tạo file KMO do FE lưu; BE không giữ lưới kim.
+
+| Method | Path | Auth | Mô tả |
+| ------ | ---- | ---- | ----- |
+| GET/POST | `/api/v1/weaving_machines` | User / Staff | Danh sách / tạo máy (`name`, `type` Single\|Double, `jacquard` 1\|2, `max_bars` và `bars` tùy chọn) |
+| GET/PATCH/DELETE | `/api/v1/weaving_machines/{id}` | User / Staff | Name, type, jacquard, max_bars, specs, bars. PATCH `bars` thay toàn bộ barre |
+| GET/POST | `/api/v1/weaving_machines/{id}/specs` | User / Staff | Gauge+width của **đúng máy** `{id}`. Query `needles_per_inch` chỉ lọc width của gauge đó trên máy này. Không có list spec theo gauge toàn cục |
+| GET/PATCH/DELETE | `/api/v1/weaving_machine_specs/{id}` | User / Staff | Một dòng gauge + width |
+| GET/POST | `/api/v1/weaving_machines/{id}/bars` | User / Staff | Barre của **đúng máy** `{id}`. Không có list barre toàn cục |
+| GET/PATCH/DELETE | `/api/v1/weaving_machine_bars/{id}` | User / Staff | Một barre |
 
 
 ### 7.3 Part workflow & Revisions — `revision_service` :9003

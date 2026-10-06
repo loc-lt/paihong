@@ -1,6 +1,6 @@
 from enum import Enum
 
-from django.db.models import IntegerChoices
+from django.db.models import IntegerChoices, TextChoices
 
 
 def choices_description(enum_cls, title):
@@ -94,6 +94,16 @@ class StepStatusEnum(IntegerChoices):
     NOT_STARTED = 1, "Not started"
     IN_PROGRESS = 2, "In progress"
     DONE = 3, "Done"
+
+
+class WeavingMachineTypeEnum(TextChoices):
+    SINGLE = "Single", "Single"
+    DOUBLE = "Double", "Double"
+
+
+class JacquardEnum(IntegerChoices):
+    ONE = 1, "1"
+    TWO = 2, "2"
 
 
 class RevisionTypeEnum(IntegerChoices):

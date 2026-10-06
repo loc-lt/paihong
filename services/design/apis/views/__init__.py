@@ -1,6 +1,11 @@
 from .color_views import ColorViewSet, SystemColorViewSet
 from .part_views import PartViewSet, SourceDocumentPartViewSet
 from .source_document_views import SourceDocumentViewSet
+from .weaving_machine_views import (
+    WeavingMachineBarViewSet,
+    WeavingMachineSpecViewSet,
+    WeavingMachineViewSet,
+)
 from .work_item_views import WorkItemViewSet
 from .workflow_views import WorkflowStepDefinitionViewSet, WorkflowTemplateViewSet
 
@@ -13,4 +18,7 @@ __all__ = [
     "WorkflowStepDefinitionViewSet",
     "ColorViewSet",
     "SystemColorViewSet",
+    "WeavingMachineViewSet",
+    "WeavingMachineSpecViewSet",
+    "WeavingMachineBarViewSet",
 ]
