@@ -1,3 +1,4 @@
+from django.db.models import Prefetch
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -26,12 +27,14 @@ from core.services.design_workspace import (
     _latest_design_file_revision,
     delete_draft_design_file,
     get_or_create_workspace,
+    reopen_design_file,
 )
 from core.utils import get_instance, global_response_errors
 
 from ..documents.design_documents import (
     create_draft_design_file_document,
     delete_draft_design_file_document,
+    reopen_design_file_document,
     design_file_autosave_document,
     design_file_complete_document,
     design_file_save_document,
@@ -79,7 +82,16 @@ class DesignWorkspaceViewSet(viewsets.ViewSet):
             .objects.select_related(
                 "part_step__part__source_document__work_item",
             )
-            .prefetch_related("files__latest_revision", "files__official_revision")
+            .prefetch_related(
+                Prefetch(
+                    "files__latest_revision",
+                    queryset=DesignFileRevision.objects.select_related("snapshot_file"),
+                ),
+                Prefetch(
+                    "files__official_revision",
+                    queryset=DesignFileRevision.objects.select_related("snapshot_file"),
+                ),
+            )
             .get(pk=workspace.pk)
         )
         return success_response(
@@ -149,8 +161,8 @@ class DesignWorkspaceViewSet(viewsets.ViewSet):
         design_file = (
             DesignFile.objects.select_related(
                 "workspace__part_step__part__source_document__work_item",
-                "latest_revision",
-                "official_revision",
+                "latest_revision__snapshot_file",
+                "official_revision__snapshot_file",
             ).get(pk=design_file.pk)
         )
         return success_response(
@@ -175,6 +187,43 @@ class DesignWorkspaceViewSet(viewsets.ViewSet):
         except ValidationError as exc:
             return global_response_errors(exc.detail)
         return success_response(None, "Draft file deleted successfully!")
+
+    @extend_schema(**reopen_design_file_document)
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"steps/START_DESIGNING/files/(?P<file_type>[^/.]+)/reopen",
+    )
+    def file_reopen(self, request, pk=None, file_type=None):
+        require_design(request.user)
+        part = get_instance(Part, pk)
+        part_step = self._get_designing_part_step(part)
+        design_file = self._get_design_file(part_step, file_type)
+        try:
+            workspace = reopen_design_file(design_file=design_file, user=request.user)
+        except ValidationError as exc:
+            return global_response_errors(exc.detail)
+        workspace = (
+            type(workspace)
+            .objects.select_related(
+                "part_step__part__source_document__work_item",
+            )
+            .prefetch_related(
+                Prefetch(
+                    "files__latest_revision",
+                    queryset=DesignFileRevision.objects.select_related("snapshot_file"),
+                ),
+                Prefetch(
+                    "files__official_revision",
+                    queryset=DesignFileRevision.objects.select_related("snapshot_file"),
+                ),
+            )
+            .get(pk=workspace.pk)
+        )
+        return success_response(
+            DesignWorkspaceSerializer(workspace).data,
+            "Design file reopened successfully!",
+        )
 
     @extend_schema(**design_file_autosave_document)
     @action(

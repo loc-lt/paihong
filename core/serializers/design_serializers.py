@@ -10,6 +10,8 @@ from core.serializers.file_serializers import FileObjectSerializer
 
 
 class DesignFileRevisionSummarySerializer(serializers.ModelSerializer):
+    snapshot_file = FileObjectSerializer(read_only=True)
+
     class Meta:
         model = DesignFileRevision
         fields = [
@@ -18,6 +20,7 @@ class DesignFileRevisionSummarySerializer(serializers.ModelSerializer):
             "revision_type",
             "grid_width",
             "grid_height",
+            "snapshot_file",
             "created_by",
             "created",
         ]
@@ -145,29 +148,50 @@ class DesignLayerSerializer(serializers.Serializer):
 
 class CreateDraftDesignFileSerializer(serializers.Serializer):
     name = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        allow_null=True,
         max_length=255,
         trim_whitespace=True,
+        allow_blank=False,
         error_messages={
+            "required": "Draft name is required!",
+            "blank": "Draft name cannot be empty!",
+            "null": "Draft name is required!",
             "invalid": "Draft name must be a string!",
             "max_length": "Draft name cannot exceed 255 characters!",
-            "null": "Draft name must be a string!",
         },
     )
-
-    def validate_name(self, value):
-        from core.serializers.fields import coerce_optional_string
-
-        return coerce_optional_string(value) or ""
+    width = serializers.IntegerField(
+        min_value=1,
+        max_value=INTEGER_FIELD_MAX_VALUE,
+        error_messages={
+            "required": "Grid width is required!",
+            "null": "Grid width is required!",
+            "invalid": "Grid width must be an integer!",
+            "min_value": "Grid width must be at least 1!",
+            "max_value": "Grid width is too large!",
+            "max_string_length": "Grid width is too large!",
+        },
+    )
+    height = serializers.IntegerField(
+        min_value=1,
+        max_value=INTEGER_FIELD_MAX_VALUE,
+        error_messages={
+            "required": "Grid height is required!",
+            "null": "Grid height is required!",
+            "invalid": "Grid height must be an integer!",
+            "min_value": "Grid height must be at least 1!",
+            "max_value": "Grid height is too large!",
+            "max_string_length": "Grid height is too large!",
+        },
+    )
 
     def create(self, validated_data):
         from core.services.design_workspace import create_draft_design_file
 
         return create_draft_design_file(
             workspace=self.context["workspace"],
-            name=validated_data.get("name") or "",
+            name=validated_data["name"],
+            width=validated_data["width"],
+            height=validated_data["height"],
             user=self.context["request"].user,
         )
 

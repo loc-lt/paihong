@@ -26,15 +26,28 @@ get_design_file_document = {
 create_draft_design_file_document = {
     "summary": "Add a draft file to the design workspace.",
     "description": (
-        "JSON body: optional `name` (default `Draft {n}`). Creates an empty grid file "
-        "(`file_type` `D1`, `D2`, …) with revision 1, same canvas size as "
-        "`workspace.settings.grid`. Paint with PATCH tiles and save layers the same way "
-        "as file S. Saving or completing a draft does not check earlier main files and "
-        "does not change main-file progress."
+        "JSON body requires `name`, `width`, and `height`. Creates an empty grid file "
+        "(`file_type` `D1`, `D2`, …) and revision 1 with a gzip snapshot of that canvas "
+        "so GET tiles can be called immediately. Paint with PATCH tiles and save layers "
+        "the same way as file S. Saving or completing a draft does not check earlier "
+        "main files and does not change main-file progress."
     ),
     "parameters": [UUID_PATH_PARAM],
     "request": CreateDraftDesignFileSerializer,
     "responses": {201: DesignFileSerializer},
+}
+
+reopen_design_file_document = {
+    "summary": "Reopen a completed main design file for editing.",
+    "description": (
+        "For a completed file in S–KMO (for example S1). Sets progress of that file and "
+        "every later file that is already complete back to `in_progress`, clears "
+        "`official_revision` on those files, and sets `active_file_type` to the reopened "
+        "file. If START_DESIGNING was done, the step returns to in progress. Draft files "
+        "cannot be reopened. Existing revisions stay; the latest revision remains."
+    ),
+    "parameters": [UUID_PATH_PARAM],
+    "responses": {200: DesignWorkspaceSerializer},
 }
 
 delete_draft_design_file_document = {

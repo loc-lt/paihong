@@ -73,14 +73,13 @@ def create_draft_design_file(
     *,
     workspace: DesignWorkspace,
     name: str,
+    width: int,
+    height: int,
     user=None,
 ) -> DesignFile:
     from core.services.design_grid.snapshot import create_empty_grid_snapshot
 
     number = _next_draft_number(workspace)
-    grid = (workspace.settings or {}).get("grid") or {}
-    width = int(grid.get("width") or 0)
-    height = int(grid.get("height") or 0)
     snapshot_file = create_empty_grid_snapshot(
         width=width,
         height=height,
@@ -349,6 +348,55 @@ def complete_design_file_revision(
         part_step.save(update_fields=["status", "completed_at", "updated_by", "modified"])
 
     return revision
+
+
+@transaction.atomic
+def reopen_design_file(*, design_file: DesignFile, user=None) -> DesignWorkspace:
+    """Clear official status from this main file through KMO so it can be edited again."""
+    from rest_framework.exceptions import ValidationError
+
+    if design_file.is_draft or design_file.file_type not in DESIGN_FILE_SEQUENCE:
+        raise ValidationError(
+            {"file_type": "Only main files S-KMO can be reopened!"}
+        )
+    workspace = design_file.workspace
+    progress = dict((workspace.settings or {}).get("progress") or {})
+    if progress.get(design_file.file_type) != "done":
+        raise ValidationError(
+            {"file_type": f"File {design_file.file_type} is not complete!"}
+        )
+
+    index = DESIGN_FILE_SEQUENCE.index(design_file.file_type)
+    done_types = [
+        file_type
+        for file_type in DESIGN_FILE_SEQUENCE[index:]
+        if progress.get(file_type) == "done"
+    ]
+    for file_type in done_types:
+        progress[file_type] = "in_progress"
+    workspace.settings = {
+        **(workspace.settings or {}),
+        "progress": progress,
+        "active_file_type": design_file.file_type,
+    }
+    workspace.updated_by = user
+    workspace.save(update_fields=["settings", "updated_by", "modified"])
+    workspace.files.filter(file_type__in=done_types).update(
+        official_revision=None,
+        updated_by=user,
+        modified=timezone.now(),
+    )
+
+    part_step = workspace.part_step
+    if part_step.status == StepStatusEnum.DONE.value:
+        part_step.status = StepStatusEnum.IN_PROGRESS.value
+        part_step.completed_at = None
+        part_step.updated_by = user
+        part_step.save(
+            update_fields=["status", "completed_at", "updated_by", "modified"]
+        )
+    return workspace
+
 
 @transaction.atomic
 def restore_design_file_revision(
