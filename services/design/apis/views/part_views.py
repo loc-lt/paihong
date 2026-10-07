@@ -3,7 +3,8 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 
-from core.filters import PartFilter
+from core.constant import StepStatusEnum
+from core.filters import PartFilter, StartDesigningPartFilter
 from core.models import Part, SourceDocument
 from core.paginators import CustomPaginator
 from core.permissions import require_design
@@ -22,6 +23,7 @@ from ..documents.part_documents import (
     create_part_document,
     delete_part_document,
     get_part_document,
+    list_designing_parts_document,
     list_source_document_parts_document,
     update_part_document,
 )
@@ -63,6 +65,22 @@ def _part_detail_response(part, message, status_code=status.HTTP_200_OK):
 class PartViewSet(viewsets.ViewSet):
     schema = PartSchema()
     parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    @extend_schema(**list_designing_parts_document)
+    def list(self, request):
+        queryset = StartDesigningPartFilter(
+            request.query_params,
+            queryset=Part.objects.filter(
+                steps__step__code="BUILD_GRID",
+                steps__status=StepStatusEnum.DONE.value,
+            )
+            .select_related("preview_file", "source_document__work_item")
+            .order_by("-created")
+            .distinct(),
+        ).qs
+        paginator = CustomPaginator()
+        page = paginator.paginate_queryset(queryset, request)
+        return paginator.get_paginated_response(PartSerializer(page, many=True).data)
 
     @extend_schema(**create_part_document)
     def create(self, request):

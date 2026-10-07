@@ -1,4 +1,12 @@
-from drf_spectacular.utils import OpenApiExample, OpenApiRequest, OpenApiResponse
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiParameter,
+    OpenApiRequest,
+    OpenApiResponse,
+    extend_schema_serializer,
+)
+from rest_framework import serializers
 
 from core.openapi_params import SOURCE_ID_PATH_PARAM, UUID_PATH_PARAM
 from core.serializers.part_serializers import (
@@ -8,6 +16,72 @@ from core.serializers.part_serializers import (
     PartSerializer,
     UpdatePartSerializer,
 )
+
+class DesigningPartListPaginationSerializer(serializers.Serializer):
+    total_items = serializers.IntegerField()
+    page_size = serializers.IntegerField()
+    current_page = serializers.IntegerField()
+    total_pages = serializers.IntegerField()
+    next_page = serializers.CharField(allow_null=True)
+    previous_page = serializers.CharField(allow_null=True)
+
+
+@extend_schema_serializer(many=False)
+class DesigningPartListResponseSerializer(serializers.Serializer):
+    status = serializers.BooleanField()
+    data = PartSerializer(many=True)
+    pagination = DesigningPartListPaginationSerializer()
+
+
+list_designing_parts_document = {
+    "summary": "List parts that have reached START_DESIGNING.",
+    "description": (
+        "Parts across every work item whose BUILD_GRID step is done, so "
+        "START_DESIGNING is available. `q` matches part name "
+        "(case-insensitive). `created_from` and `created_to` are inclusive "
+        "dates (`YYYY-MM-DD`) on the part created date. An invalid date "
+        "returns an empty page. `page` starts at 1. `page_size` defaults to 5 "
+        "and cannot exceed 100."
+    ),
+    "parameters": [
+        OpenApiParameter(
+            "q",
+            OpenApiTypes.STR,
+            OpenApiParameter.QUERY,
+            required=False,
+            description="Case-insensitive match on part name.",
+        ),
+        OpenApiParameter(
+            "created_from",
+            OpenApiTypes.DATE,
+            OpenApiParameter.QUERY,
+            required=False,
+            description="Inclusive start of the part created date (YYYY-MM-DD).",
+        ),
+        OpenApiParameter(
+            "created_to",
+            OpenApiTypes.DATE,
+            OpenApiParameter.QUERY,
+            required=False,
+            description="Inclusive end of the part created date (YYYY-MM-DD).",
+        ),
+        OpenApiParameter(
+            "page",
+            OpenApiTypes.INT,
+            OpenApiParameter.QUERY,
+            required=False,
+            description="Page number, starting at 1.",
+        ),
+        OpenApiParameter(
+            "page_size",
+            OpenApiTypes.INT,
+            OpenApiParameter.QUERY,
+            required=False,
+            description="Items per page. Default 5, maximum 100.",
+        ),
+    ],
+    "responses": {200: DesigningPartListResponseSerializer},
+}
 
 create_part_document = {
     "summary": "Create one or more parts for a source document.",
