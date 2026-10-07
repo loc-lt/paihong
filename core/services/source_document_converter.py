@@ -8,7 +8,7 @@ import matplotlib
 import pymupdf
 from ezdxf.addons.drawing import Frontend, RenderContext
 
-from core.services.converter_pipeline.pipeline import process_svg_string
+from core.services.raster_pipeline.pipeline import process_svg_raster
 
 matplotlib.use("Agg")
 matplotlib.rcParams["svg.fonttype"] = "none"
@@ -23,9 +23,8 @@ class FileToSvgConverter:
         file_bytes: bytes, filename: str
     ) -> tuple[list[str], list[list[str]], str]:
         """
-        Routes the uploaded file to the appropriate converter based on its extension.
-        Returns a tuple containing a list of individual SVGs, texts per SVG,
-        and one combined SVG.
+        Convert PDF/AI/DXF via the raster pipeline (render PNG, label regions).
+        Returns a tuple of regional SVGs, texts per SVG, and one combined SVG.
         """
         ext = os.path.splitext(filename)[1].lower()
 
@@ -54,7 +53,7 @@ class FileToSvgConverter:
             full_svg = page.get_svg_image(text_as_path=False)
             raw_full_svgs.append(full_svg)
 
-            regional_svgs, regional_texts = process_svg_string(full_svg)
+            regional_svgs, regional_texts = process_svg_raster(full_svg)
             list_svg.extend(regional_svgs)
             list_texts.extend(regional_texts)
 
@@ -71,8 +70,8 @@ class FileToSvgConverter:
         file_bytes: bytes, units_per_inch: float = 25.4
     ) -> tuple[list[str], list[list[str]], str]:
         """
-        Converts a DXF drawing into an SVG string using matplotlib.
-        Uses in-memory geometric processing to extract separated regions.
+        Converts a DXF drawing into an SVG string using matplotlib,
+        then splits regions with the raster pipeline.
         """
         with tempfile.NamedTemporaryFile(delete=False, suffix=".dxf") as tmp:
             tmp.write(file_bytes)
@@ -94,8 +93,7 @@ class FileToSvgConverter:
         backend = MatplotlibBackend(ax)
         Frontend(RenderContext(doc), backend).draw_layout(msp, finalize=True)
 
-        # Inject DXF texts into the Matplotlib figure as invisible elements
-        # so they can be processed and split by region_splitter.py
+        # Inject hidden DXF texts (same as the AI raster converter)
         dxf_texts = FileToSvgConverter._get_all_dxf_texts(msp)
         for text_str, x, y in dxf_texts:
             if text_str.strip():
@@ -121,7 +119,7 @@ class FileToSvgConverter:
 
         full_svg = svg_buffer.getvalue()
 
-        list_svg, list_texts = process_svg_string(full_svg)
+        list_svg, list_texts = process_svg_raster(full_svg)
         svg_full = full_svg
 
         return list_svg, list_texts, svg_full

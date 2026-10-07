@@ -17,3 +17,4 @@ exclude =
     /**/**/database_seeder.py
     /**/**/validators.py
     core/services/converter_pipeline/*
+    core/services/raster_pipeline/*
