@@ -10,21 +10,33 @@ from core.serializers.ai_design_serializers import (
 
 _AI_RESPONSES = {
     200: AiServiceResponseSerializer,
-    404: AiServiceResponseSerializer,
-    422: OpenApiResponse(
-        description="Validation error from the AI service. Body is forwarded unchanged."
+    400: OpenApiResponse(
+        description=(
+            "Validation or render failure. `message` starts with `[render_png][field]` "
+            "or a field validation message."
+        )
     ),
     500: OpenApiResponse(
-        description="Error from the AI service. JSON or plain text is forwarded unchanged."
+        description="Unexpected backend error. `message` starts with `[backend]`."
     ),
-    502: OpenApiResponse(description="AI service is not configured or unreachable."),
-    504: OpenApiResponse(description="AI service timed out."),
+    502: OpenApiResponse(
+        description=(
+            "Config, connect, or AI failure. `message` starts with `[config]`, "
+            "`[ai_connect]`, or `[ai_response]`. `data` includes `stage`, `ai_url`, "
+            "`ai_status`, `ai_body`, and `request_payload` when available."
+        )
+    ),
+    504: OpenApiResponse(
+        description="AI timed out. `message` starts with `[ai_timeout]`."
+    ),
 }
 
 _ID_TO_PNG = (
     "Each revision id is a START_DESIGNING design-file revision. The backend reads "
     "that revision's gzip snapshot, renders a PNG, and sends the saved PNG path to "
-    "the AI service. The AI status code and response body are returned unchanged."
+    "the AI service. A successful AI JSON body is returned as-is. Failures are "
+    "wrapped as `{status:false, message:'[stage] …', data:{stage,…}}` so the "
+    "failing step is explicit."
 )
 
 smart_s_document = {

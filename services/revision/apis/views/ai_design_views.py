@@ -1,8 +1,11 @@
+import logging
+
 from drf_spectacular.utils import extend_schema
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import JSONParser
+from rest_framework.response import Response
 
 from core.permissions import require_design
 from core.serializers.ai_design_serializers import (
@@ -26,6 +29,8 @@ from ..documents.ai_design_documents import (
     smart_s_document,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class AiDesignViewSet(viewsets.ViewSet):
     parser_classes = [JSONParser]
@@ -39,6 +44,24 @@ class AiDesignViewSet(viewsets.ViewSet):
             return recall(serializer.validated_data)
         except ValidationError as exc:
             return global_response_errors(exc.detail)
+        except Exception as exc:
+            logger.exception("Unexpected AI recall failure in %s", recall.__name__)
+            return Response(
+                {
+                    "status": False,
+                    "message": (
+                        f"[backend] Unexpected error in {recall.__name__}: "
+                        f"{type(exc).__name__}: {exc}"
+                    ),
+                    "data": {
+                        "stage": "backend",
+                        "handler": recall.__name__,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    },
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     @extend_schema(**smart_s_document)
     @action(detail=False, methods=["post"], url_path="smart_s")
