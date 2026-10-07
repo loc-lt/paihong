@@ -527,6 +527,7 @@ Default users (seeder): `admin`, `designer`, `developer` — password `Defaultpa
 | GET    | `/api/v1/source_documents/{id}/`              | User  |                                                                                        |
 | DELETE | `/api/v1/source_documents/{id}/`              | User  |                                                                                        |
 | GET    | `/api/v1/source_documents/{source_id}/parts/` | User  | Paginated                                                                              |
+| GET    | `/api/v1/parts`                               | User  | Part của mọi work item đã tới START_DESIGNING (BUILD_GRID `done`). Phân trang. Filter `q` (name, icontains), `created_from`, `created_to` (`YYYY-MM-DD`, inclusive). Ngày không hợp lệ → trang rỗng |
 | POST   | `/api/v1/parts/`                              | Staff | Bulk create. Multipart: `source_document_id` một lần, `previews` lặp mỗi part. `name` = `New part 1`, `New part 2`, … (nối tiếp số part đã có). `sequence` = max+1, +2, …; init steps như import (RECEIVE_FILES DONE) |
 | GET    | `/api/v1/parts/{id}/`                         | User  | Part detail + nested source_document + file URL                                        |
 | PATCH  | `/api/v1/parts/{id}/`                         | Staff | `name`, `status`; multipart field `preview` để thay ảnh part (khi import PDF sai vùng) |
@@ -585,6 +586,10 @@ FE: chọn name → các gauge là `needles_per_inch` phân biệt trong spec c�
 | GET    | `/api/v1/design_file_revisions/{id}/tiles/?x0&y0&x1&y1`            | User  | Viewport tile load (**S và file nháp**)                                                      |
 | PATCH  | `/api/v1/design_file_revisions/{id}/tiles/`                        | Staff | Batch tile upload (**S và file nháp**). Lưu nguyên `data` (base64 gzip hoặc base64 JSON), không giải nén, không ghi `tile_manifest`, không vẽ preview. GET trả lại đúng chuỗi đó. Optional `grid_width` + `grid_height` để đổi kích thước |
 | POST   | `/api/v1/design_file_revisions/{id}/restore/`                      | Staff | Restore design file revision                                                                 |
+| POST   | `/api/v1/ai/smart_s`                                               | Staff | FE gửi `svg_id` (revision START_DESIGNING). BE render gzip snapshot thành PNG rồi gọi `AI_DOMAIN/api/smart_s` với `path_svg` |
+| POST   | `/api/v1/ai/merge_images`                                          | Staff | FE gửi `image_ids[]`. BE render từng revision thành PNG rồi gọi AI với `image_paths`. `background` `white`/`black` |
+| POST   | `/api/v1/ai/create_files_c`                                        | Staff | FE gửi `file_id`. BE render PNG rồi gọi AI với `file_path` |
+| POST   | `/api/v1/ai/create_file_p`                                         | Staff | FE gửi `l_id`, `r_id`, `l_f_id`, `r_f_id`. BE render PNG rồi gọi AI với `path_l`, `path_r`, `path_l_f`, `path_r_f` |
 | GET    | `/api/v1/colors/`                                                  | User  | System block (theo `display_order`) + custom block của user (theo `display_order`)           |
 | POST   | `/api/v1/colors/`                                                  | Staff | Tạo màu custom: `code`, `hex_value` bắt buộc; `name`, `display_order` optional               |
 | PATCH  | `/api/v1/colors/{id}/`                                             | Staff | Sửa màu custom (`code`, `hex_value`, `name`, `display_order`); id system → 400               |

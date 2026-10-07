@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    AiDesignViewSet,
     DesignFileRevisionViewSet,
     DesignWorkspaceViewSet,
     PartWorkflowViewSet,
@@ -17,6 +18,7 @@ router.register(
     DesignFileRevisionViewSet,
     basename="design-file-revision",
 )
+router.register(r"v1/ai", AiDesignViewSet, basename="ai-design")
 
 urlpatterns = [
     path("", include(router.urls)),
