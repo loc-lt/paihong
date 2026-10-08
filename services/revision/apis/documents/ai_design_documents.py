@@ -1,14 +1,19 @@
 from drf_spectacular.utils import OpenApiResponse
 
 from core.serializers.ai_design_serializers import (
-    AiFilePathProductCodeSerializer,
     AiServiceResponseSerializer,
+    AiUrlPathProductCodeSerializer,
+    AiUrlSvgProductCodeSerializer,
+    AutoJobRequestSerializer,
+    CombineFcRequestSerializer,
     CreateFileFcRequestSerializer,
     CreateFilePRequestSerializer,
     CreateFilesCRequestSerializer,
+    CreateKmoRequestSerializer,
     CreateTrainDbAnchorRequestSerializer,
     CreateTrainDbRequestSerializer,
     MergeImagesRequestSerializer,
+    ShiftOddRowsRequestSerializer,
     SmartSRequestSerializer,
 )
 
@@ -45,16 +50,17 @@ _ID_TO_PNG = (
     "is explicit."
 )
 
-_PASSTHROUGH_PATH = (
-    "FE sends the image/SVG path in `file_path` directly. The backend forwards the "
+_PASSTHROUGH_SVG = (
+    "FE sends `url_svg` and `product_code` directly. The backend forwards the "
     "validated body to the AI service unchanged."
 )
 
 smart_s_document = {
-    "tags": ["AI design files"],
+    "tags": ["ai_design_files"],
     "summary": "Smart S",
     "description": (
-        "Recall `AI_DOMAIN/api/smart_s`. FE sends `svg_id` instead of `path_svg`. "
+        "Recall `AI_DOMAIN/api/v1/smart_s`. FE sends `svg_id`. The backend sends "
+        "`url_svg` as the public PNG URL. "
         + _ID_TO_PNG
     ),
     "request": SmartSRequestSerializer,
@@ -62,13 +68,13 @@ smart_s_document = {
 }
 
 merge_images_document = {
-    "tags": ["AI design files"],
+    "tags": ["ai_design_files"],
     "summary": "Merge Images",
     "description": (
-        "Recall `AI_DOMAIN/api/merge_images`. FE sends `image_ids` instead of "
-        "`image_paths`. The first id is the bottom layer and the last id is the top. "
-        "Where images overlap, the topmost non-background pixel wins. "
-        "`background` is `white` or `black` (default `white`). "
+        "Recall `AI_DOMAIN/api/v1/merge_images`. FE sends `list_image_ids`. The "
+        "backend sends `list_url_images`. The first id is the bottom layer and the "
+        "last id is the top. Where images overlap, the topmost non-background pixel "
+        "wins. `background` is `white` or `black` (default `white`). "
         + _ID_TO_PNG
     ),
     "request": MergeImagesRequestSerializer,
@@ -76,11 +82,11 @@ merge_images_document = {
 }
 
 create_files_c_document = {
-    "tags": ["AI design files"],
+    "tags": ["ai_design_files"],
     "summary": "Create files C",
     "description": (
-        "Recall `AI_DOMAIN/api/create_files_c`. FE sends `file_id` instead of "
-        "`file_path`. The AI service detects the L/R side and writes four files "
+        "Recall `AI_DOMAIN/api/v1/create_files_c`. FE sends `image_id`. The backend "
+        "sends `url_image`. The AI service detects the L/R side and writes four files "
         "`image_<product_code>_{L,R}.png` plus the 180-degree copies (`_F`). "
         + _ID_TO_PNG
     ),
@@ -89,11 +95,11 @@ create_files_c_document = {
 }
 
 create_file_p_document = {
-    "tags": ["AI design files"],
+    "tags": ["ai_design_files"],
     "summary": "Create file P",
     "description": (
-        "Recall `AI_DOMAIN/api/create_file_p`. FE sends `l_id`, `r_id`, `l_f_id`, "
-        "and `r_f_id` instead of `path_l`, `path_r`, `path_l_f`, and `path_r_f`. "
+        "Recall `AI_DOMAIN/api/v1/create_file_p`. FE sends `l_id`, `r_id`, `l_f_id`, "
+        "and `r_f_id`. The backend sends `url_l`, `url_r`, `url_l_f`, and `url_r_f`. "
         "`wales_per_inch`, `courses_per_cm`, and `courses_per_pixel` are optional. "
         + _ID_TO_PNG
     ),
@@ -102,50 +108,53 @@ create_file_p_document = {
 }
 
 split_regions_document = {
-    "tags": ["AI design files"],
+    "tags": ["ai_design_files"],
     "summary": "Split regions",
-    "description": f"Recall `AI_DOMAIN/split_regions`. {_PASSTHROUGH_PATH}",
-    "request": AiFilePathProductCodeSerializer,
+    "description": (
+        "Recall `AI_DOMAIN/api/v1/split_regions`. FE sends `url_path` and "
+        "`product_code`. The backend forwards the validated body unchanged."
+    ),
+    "request": AiUrlPathProductCodeSerializer,
     "responses": _AI_RESPONSES,
 }
 
 rotate_svg_document = {
-    "tags": ["AI design files"],
+    "tags": ["ai_design_files"],
     "summary": "Rotate SVG",
-    "description": f"Recall `AI_DOMAIN/rotate_svg`. {_PASSTHROUGH_PATH}",
-    "request": AiFilePathProductCodeSerializer,
+    "description": f"Recall `AI_DOMAIN/api/v1/rotate_svg`. {_PASSTHROUGH_SVG}",
+    "request": AiUrlSvgProductCodeSerializer,
     "responses": _AI_RESPONSES,
 }
 
 delete_paths_document = {
-    "tags": ["AI design files"],
+    "tags": ["ai_design_files"],
     "summary": "Delete paths",
-    "description": f"Recall `AI_DOMAIN/delete_paths`. {_PASSTHROUGH_PATH}",
-    "request": AiFilePathProductCodeSerializer,
+    "description": f"Recall `AI_DOMAIN/api/v1/delete_paths`. {_PASSTHROUGH_SVG}",
+    "request": AiUrlSvgProductCodeSerializer,
     "responses": _AI_RESPONSES,
 }
 
 delete_anchors_document = {
-    "tags": ["AI design files"],
+    "tags": ["ai_design_files"],
     "summary": "Delete anchors",
-    "description": f"Recall `AI_DOMAIN/delete_anchors`. {_PASSTHROUGH_PATH}",
-    "request": AiFilePathProductCodeSerializer,
+    "description": f"Recall `AI_DOMAIN/api/v1/delete_anchors`. {_PASSTHROUGH_SVG}",
+    "request": AiUrlSvgProductCodeSerializer,
     "responses": _AI_RESPONSES,
 }
 
 color_paths_document = {
-    "tags": ["AI design files"],
+    "tags": ["ai_design_files"],
     "summary": "Color paths",
-    "description": f"Recall `AI_DOMAIN/color_paths`. {_PASSTHROUGH_PATH}",
-    "request": AiFilePathProductCodeSerializer,
+    "description": f"Recall `AI_DOMAIN/api/v1/color_paths`. {_PASSTHROUGH_SVG}",
+    "request": AiUrlSvgProductCodeSerializer,
     "responses": _AI_RESPONSES,
 }
 
 create_train_db_document = {
-    "tags": ["AI design files"],
+    "tags": ["ai_design_files"],
     "summary": "Create train DB",
     "description": (
-        "Recall `AI_DOMAIN/create_train_db`. FE sends `file_path`, `index_list` "
+        "Recall `AI_DOMAIN/api/v1/create_train_db`. FE sends `url_svg`, `index_list` "
         "(path indices), and `type` directly. The backend forwards the body unchanged."
     ),
     "request": CreateTrainDbRequestSerializer,
@@ -153,10 +162,10 @@ create_train_db_document = {
 }
 
 create_train_db_anchor_document = {
-    "tags": ["AI design files"],
+    "tags": ["ai_design_files"],
     "summary": "Create train DB anchors",
     "description": (
-        "Recall `AI_DOMAIN/create_train_db_anchor`. FE sends `file_path` and "
+        "Recall `AI_DOMAIN/api/v1/create_train_db_anchor`. FE sends `url_svg` and "
         "`index_list` as pairs `[path_index, point_index]`. The backend forwards "
         "the body unchanged."
     ),
@@ -165,13 +174,63 @@ create_train_db_anchor_document = {
 }
 
 create_file_fc_document = {
-    "tags": ["AI design files"],
+    "tags": ["ai_design_files"],
     "summary": "Create file FC / finalize P",
     "description": (
-        "Recall `AI_DOMAIN/api/create_file_fc`. FE sends `image_id` instead of "
-        "`image_path`. `type_machine` is optional. "
+        "Recall `AI_DOMAIN/api/v1/create_file_fc`. FE sends `image_id`. The backend "
+        "sends `url_image`. `type_machine` is optional. "
         + _ID_TO_PNG
     ),
     "request": CreateFileFcRequestSerializer,
+    "responses": _AI_RESPONSES,
+}
+
+auto_job_document = {
+    "tags": ["ai_design_files"],
+    "summary": "Auto job",
+    "description": (
+        "Recall `AI_DOMAIN/api/v1/auto_job`. FE sends `image_id`. The backend sends "
+        "`url_image`. `type_machine` and `number_jackquard` are optional. "
+        + _ID_TO_PNG
+    ),
+    "request": AutoJobRequestSerializer,
+    "responses": _AI_RESPONSES,
+}
+
+combine_fc_document = {
+    "tags": ["ai_design_files"],
+    "summary": "Combine FC",
+    "description": (
+        "Recall `AI_DOMAIN/api/v1/combine_fc`. FE sends `ff_id` and `fb_id`. The "
+        "backend sends `url_ff` and `url_fb`. `ff_has_hole` and `fb_has_hole` default "
+        "to false. "
+        + _ID_TO_PNG
+    ),
+    "request": CombineFcRequestSerializer,
+    "responses": _AI_RESPONSES,
+}
+
+shift_odd_rows_document = {
+    "tags": ["ai_design_files"],
+    "summary": "Shift odd rows",
+    "description": (
+        "Recall `AI_DOMAIN/api/v1/shift_odd_rows`. FE sends `image_id` and `value`. "
+        "The backend sends `url_image` and `value`. "
+        + _ID_TO_PNG
+    ),
+    "request": ShiftOddRowsRequestSerializer,
+    "responses": _AI_RESPONSES,
+}
+
+create_kmo_document = {
+    "tags": ["ai_design_files"],
+    "summary": "Create KMO",
+    "description": (
+        "Recall `AI_DOMAIN/api/v1/create_kmo`. FE sends `image_id`. The backend sends "
+        "`url_image`. `name_machine`, `gauge`, `width`, `rt`, `product_code`, "
+        "`course_per_pixel`, and `kmo_has_valve_chain` are optional. "
+        + _ID_TO_PNG
+    ),
+    "request": CreateKmoRequestSerializer,
     "responses": _AI_RESPONSES,
 }

@@ -9,42 +9,55 @@ from rest_framework.response import Response
 
 from core.permissions import require_design
 from core.serializers.ai_design_serializers import (
-    AiFilePathProductCodeSerializer,
+    AiUrlPathProductCodeSerializer,
+    AiUrlSvgProductCodeSerializer,
+    AutoJobRequestSerializer,
+    CombineFcRequestSerializer,
     CreateFileFcRequestSerializer,
     CreateFilePRequestSerializer,
     CreateFilesCRequestSerializer,
+    CreateKmoRequestSerializer,
     CreateTrainDbAnchorRequestSerializer,
     CreateTrainDbRequestSerializer,
     MergeImagesRequestSerializer,
+    ShiftOddRowsRequestSerializer,
     SmartSRequestSerializer,
 )
 from core.services.ai_design import (
+    recall_auto_job,
     recall_color_paths,
+    recall_combine_fc,
     recall_create_file_fc,
     recall_create_file_p,
     recall_create_files_c,
+    recall_create_kmo,
     recall_create_train_db,
     recall_create_train_db_anchor,
     recall_delete_anchors,
     recall_delete_paths,
     recall_merge_images,
     recall_rotate_svg,
+    recall_shift_odd_rows,
     recall_smart_s,
     recall_split_regions,
 )
 from core.utils import global_response_errors
 
 from ..documents.ai_design_documents import (
+    auto_job_document,
     color_paths_document,
+    combine_fc_document,
     create_file_fc_document,
     create_file_p_document,
     create_files_c_document,
+    create_kmo_document,
     create_train_db_anchor_document,
     create_train_db_document,
     delete_anchors_document,
     delete_paths_document,
     merge_images_document,
     rotate_svg_document,
+    shift_odd_rows_document,
     smart_s_document,
     split_regions_document,
 )
@@ -106,27 +119,27 @@ class AiDesignViewSet(viewsets.ViewSet):
     @extend_schema(**split_regions_document)
     @action(detail=False, methods=["post"], url_path="split_regions")
     def split_regions(self, request):
-        return self._recall(request, AiFilePathProductCodeSerializer, recall_split_regions)
+        return self._recall(request, AiUrlPathProductCodeSerializer, recall_split_regions)
 
     @extend_schema(**rotate_svg_document)
     @action(detail=False, methods=["post"], url_path="rotate_svg")
     def rotate_svg(self, request):
-        return self._recall(request, AiFilePathProductCodeSerializer, recall_rotate_svg)
+        return self._recall(request, AiUrlSvgProductCodeSerializer, recall_rotate_svg)
 
     @extend_schema(**delete_paths_document)
     @action(detail=False, methods=["post"], url_path="delete_paths")
     def delete_paths(self, request):
-        return self._recall(request, AiFilePathProductCodeSerializer, recall_delete_paths)
+        return self._recall(request, AiUrlSvgProductCodeSerializer, recall_delete_paths)
 
     @extend_schema(**delete_anchors_document)
     @action(detail=False, methods=["post"], url_path="delete_anchors")
     def delete_anchors(self, request):
-        return self._recall(request, AiFilePathProductCodeSerializer, recall_delete_anchors)
+        return self._recall(request, AiUrlSvgProductCodeSerializer, recall_delete_anchors)
 
     @extend_schema(**color_paths_document)
     @action(detail=False, methods=["post"], url_path="color_paths")
     def color_paths(self, request):
-        return self._recall(request, AiFilePathProductCodeSerializer, recall_color_paths)
+        return self._recall(request, AiUrlSvgProductCodeSerializer, recall_color_paths)
 
     @extend_schema(**create_train_db_document)
     @action(detail=False, methods=["post"], url_path="create_train_db")
@@ -146,3 +159,23 @@ class AiDesignViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="create_file_fc")
     def create_file_fc(self, request):
         return self._recall(request, CreateFileFcRequestSerializer, recall_create_file_fc)
+
+    @extend_schema(**auto_job_document)
+    @action(detail=False, methods=["post"], url_path="auto_job")
+    def auto_job(self, request):
+        return self._recall(request, AutoJobRequestSerializer, recall_auto_job)
+
+    @extend_schema(**combine_fc_document)
+    @action(detail=False, methods=["post"], url_path="combine_fc")
+    def combine_fc(self, request):
+        return self._recall(request, CombineFcRequestSerializer, recall_combine_fc)
+
+    @extend_schema(**shift_odd_rows_document)
+    @action(detail=False, methods=["post"], url_path="shift_odd_rows")
+    def shift_odd_rows(self, request):
+        return self._recall(request, ShiftOddRowsRequestSerializer, recall_shift_odd_rows)
+
+    @extend_schema(**create_kmo_document)
+    @action(detail=False, methods=["post"], url_path="create_kmo")
+    def create_kmo(self, request):
+        return self._recall(request, CreateKmoRequestSerializer, recall_create_kmo)

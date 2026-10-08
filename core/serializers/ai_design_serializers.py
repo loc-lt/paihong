@@ -58,7 +58,7 @@ class SmartSRequestSerializer(serializers.Serializer):
 
 class MergeImagesRequestSerializer(serializers.Serializer):
     product_code = _required_text("Product code", max_length=255)
-    image_ids = serializers.ListField(
+    list_image_ids = serializers.ListField(
         allow_empty=False,
         child=_required_revision_id("Image revision id"),
         error_messages={
@@ -81,8 +81,8 @@ class MergeImagesRequestSerializer(serializers.Serializer):
 
 
 class CreateFilesCRequestSerializer(serializers.Serializer):
-    file_id = _required_revision_id("File revision id")
     product_code = _required_text("Product code", max_length=255)
+    image_id = _required_revision_id("Image revision id")
 
 
 class CreateFilePRequestSerializer(serializers.Serializer):
@@ -96,15 +96,22 @@ class CreateFilePRequestSerializer(serializers.Serializer):
     courses_per_pixel = _optional_number("Courses per pixel")
 
 
-class AiFilePathProductCodeSerializer(serializers.Serializer):
-    """FE passes the image/SVG path directly; BE forwards it to AI unchanged."""
+class AiUrlPathProductCodeSerializer(serializers.Serializer):
+    """FE passes the file URL directly; BE forwards it to AI unchanged."""
 
-    file_path = _required_text("File path", max_length=2000)
+    url_path = _required_text("URL path", max_length=2000)
+    product_code = _required_text("Product code", max_length=255)
+
+
+class AiUrlSvgProductCodeSerializer(serializers.Serializer):
+    """FE passes the SVG URL directly; BE forwards it to AI unchanged."""
+
+    url_svg = _required_text("SVG URL", max_length=2000)
     product_code = _required_text("Product code", max_length=255)
 
 
 class CreateTrainDbRequestSerializer(serializers.Serializer):
-    file_path = _required_text("File path", max_length=2000)
+    url_svg = _required_text("SVG URL", max_length=2000)
     index_list = serializers.ListField(
         allow_empty=False,
         child=serializers.IntegerField(
@@ -130,7 +137,7 @@ class CreateTrainDbRequestSerializer(serializers.Serializer):
 
 
 class CreateTrainDbAnchorRequestSerializer(serializers.Serializer):
-    file_path = _required_text("File path", max_length=2000)
+    url_svg = _required_text("SVG URL", max_length=2000)
     index_list = serializers.ListField(
         allow_empty=False,
         child=serializers.ListField(
@@ -197,3 +204,92 @@ class CreateFileFcRequestSerializer(serializers.Serializer):
         if value is None:
             return None
         return value
+
+
+def _optional_int(label: str) -> serializers.IntegerField:
+    return serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        min_value=-INTEGER_FIELD_MAX_VALUE,
+        max_value=INTEGER_FIELD_MAX_VALUE,
+        error_messages={
+            "invalid": f"{label} must be an integer!",
+            "min_value": f"{label} is too small!",
+            "max_value": f"{label} is too large!",
+            "max_string_length": f"{label} is too large!",
+        },
+    )
+
+
+def _optional_text(label: str) -> serializers.CharField:
+    return serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        max_length=255,
+        trim_whitespace=True,
+        error_messages={
+            "invalid": f"{label} must be a string!",
+            "max_length": f"{label} cannot exceed 255 characters!",
+        },
+    )
+
+
+def _optional_bool(label: str, *, default=False) -> serializers.BooleanField:
+    return serializers.BooleanField(
+        required=False,
+        default=default,
+        error_messages={
+            "invalid": f"{label} must be true or false!",
+            "null": f"{label} must be true or false!",
+        },
+    )
+
+
+class AutoJobRequestSerializer(serializers.Serializer):
+    product_code = _required_text("Product code", max_length=255)
+    image_id = _required_revision_id("Image revision id")
+    type_machine = _optional_text("Machine type")
+    number_jackquard = _optional_int("Number jackquard")
+
+
+class CombineFcRequestSerializer(serializers.Serializer):
+    product_code = _required_text("Product code", max_length=255)
+    ff_id = _required_revision_id("FF revision id")
+    fb_id = _required_revision_id("FB revision id")
+    ff_has_hole = _optional_bool("FF has hole")
+    fb_has_hole = _optional_bool("FB has hole")
+
+
+class ShiftOddRowsRequestSerializer(serializers.Serializer):
+    image_id = _required_revision_id("Image revision id")
+    value = serializers.IntegerField(
+        min_value=-INTEGER_FIELD_MAX_VALUE,
+        max_value=INTEGER_FIELD_MAX_VALUE,
+        error_messages={
+            "required": "Shift value is required!",
+            "null": "Shift value is required!",
+            "invalid": "Shift value must be an integer!",
+            "min_value": "Shift value is too small!",
+            "max_value": "Shift value is too large!",
+            "max_string_length": "Shift value is too large!",
+        },
+    )
+
+
+class CreateKmoRequestSerializer(serializers.Serializer):
+    image_id = _required_revision_id("Image revision id")
+    name_machine = _optional_text("Machine name")
+    gauge = _optional_int("Gauge")
+    width = _optional_int("Width")
+    rt = _optional_int("RT")
+    product_code = _optional_text("Product code")
+    course_per_pixel = _optional_int("Course per pixel")
+    kmo_has_valve_chain = serializers.BooleanField(
+        required=False,
+        allow_null=True,
+        default=False,
+        error_messages={
+            "invalid": "KMO has valve chain must be true or false!",
+        },
+    )

@@ -586,18 +586,22 @@ FE: chọn name → các gauge là `needles_per_inch` phân biệt trong spec c�
 | GET    | `/api/v1/design_file_revisions/{id}/tiles/?x0&y0&x1&y1`            | User  | Viewport tile load (**S và file nháp**)                                                      |
 | PATCH  | `/api/v1/design_file_revisions/{id}/tiles/`                        | Staff | Batch tile upload (**S và file nháp**). Lưu nguyên `data` (base64 gzip hoặc base64 JSON), không giải nén, không ghi `tile_manifest`, không vẽ preview. GET trả lại đúng chuỗi đó. Optional `grid_width` + `grid_height` để đổi kích thước |
 | POST   | `/api/v1/design_file_revisions/{id}/restore/`                      | Staff | Restore design file revision                                                                 |
-| POST   | `/api/v1/ai/smart_s`                                               | Staff | FE gửi `svg_id` (revision START_DESIGNING). BE render PNG URL (`BE_DOMAIN/media/...`) rồi gọi `AI_DOMAIN/api/smart_s` |
-| POST   | `/api/v1/ai/merge_images`                                          | Staff | FE gửi `image_ids[]`. BE render URL rồi gọi AI với `image_paths`. `background` `white`/`black` |
-| POST   | `/api/v1/ai/create_files_c`                                        | Staff | FE gửi `file_id`. BE render URL rồi gọi AI với `file_path` |
-| POST   | `/api/v1/ai/create_file_p`                                         | Staff | FE gửi `l_id`, `r_id`, `l_f_id`, `r_f_id`. BE gửi URL public cho AI |
-| POST   | `/api/v1/ai/split_regions`                                         | Staff | Passthrough `file_path` + `product_code` → `AI_DOMAIN/split_regions` |
-| POST   | `/api/v1/ai/rotate_svg`                                            | Staff | Passthrough `file_path` + `product_code` → `AI_DOMAIN/rotate_svg` |
-| POST   | `/api/v1/ai/delete_paths`                                          | Staff | Passthrough `file_path` + `product_code` → `AI_DOMAIN/delete_paths` |
-| POST   | `/api/v1/ai/delete_anchors`                                        | Staff | Passthrough `file_path` + `product_code` → `AI_DOMAIN/delete_anchors` |
-| POST   | `/api/v1/ai/color_paths`                                           | Staff | Passthrough `file_path` + `product_code` → `AI_DOMAIN/color_paths` |
-| POST   | `/api/v1/ai/create_train_db`                                       | Staff | Passthrough `file_path`, `index_list[]`, `type` → `AI_DOMAIN/create_train_db` |
-| POST   | `/api/v1/ai/create_train_db_anchor`                                | Staff | Passthrough `file_path`, `index_list` cặp `[path_index, point_index]` → `AI_DOMAIN/create_train_db_anchor` |
-| POST   | `/api/v1/ai/create_file_fc`                                        | Staff | FE gửi `image_id` (+ `product_code`, `count`, `type_machine` tùy chọn). BE đổi thành URL `image_path` rồi gọi `AI_DOMAIN/api/create_file_fc` |
+| POST   | `/api/v1/ai/smart_s`                                               | Staff | FE gửi `svg_id`. BE render PNG URL (`BE_DOMAIN/media/...`) rồi gọi `AI_DOMAIN/api/v1/smart_s` với `url_svg` |
+| POST   | `/api/v1/ai/merge_images`                                          | Staff | FE gửi `list_image_ids[]`. BE gọi AI với `list_url_images`. `background` `white`/`black` |
+| POST   | `/api/v1/ai/create_files_c`                                        | Staff | FE gửi `image_id`. BE gọi `AI_DOMAIN/api/v1/create_files_c` với `url_image` |
+| POST   | `/api/v1/ai/create_file_p`                                         | Staff | FE gửi `l_id`, `r_id`, `l_f_id`, `r_f_id`. BE gửi `url_l`, `url_r`, `url_l_f`, `url_r_f` |
+| POST   | `/api/v1/ai/split_regions`                                         | Staff | Passthrough `url_path` + `product_code` → `AI_DOMAIN/api/v1/split_regions` |
+| POST   | `/api/v1/ai/rotate_svg`                                            | Staff | Passthrough `url_svg` + `product_code` → `AI_DOMAIN/api/v1/rotate_svg` |
+| POST   | `/api/v1/ai/delete_paths`                                          | Staff | Passthrough `url_svg` + `product_code` → `AI_DOMAIN/api/v1/delete_paths` |
+| POST   | `/api/v1/ai/delete_anchors`                                        | Staff | Passthrough `url_svg` + `product_code` → `AI_DOMAIN/api/v1/delete_anchors` |
+| POST   | `/api/v1/ai/color_paths`                                           | Staff | Passthrough `url_svg` + `product_code` → `AI_DOMAIN/api/v1/color_paths` |
+| POST   | `/api/v1/ai/create_train_db`                                       | Staff | Passthrough `url_svg`, `index_list[]`, `type` → `AI_DOMAIN/api/v1/create_train_db` |
+| POST   | `/api/v1/ai/create_train_db_anchor`                                | Staff | Passthrough `url_svg`, `index_list` cặp `[path_index, point_index]` → `AI_DOMAIN/api/v1/create_train_db_anchor` |
+| POST   | `/api/v1/ai/create_file_fc`                                        | Staff | FE gửi `image_id` (+ `product_code`, `count`, `type_machine` tùy chọn). BE gửi `url_image` tới `AI_DOMAIN/api/v1/create_file_fc` |
+| POST   | `/api/v1/ai/auto_job`                                              | Staff | FE gửi `image_id`, `product_code`; `type_machine`, `number_jackquard` tùy chọn. BE gửi `url_image` |
+| POST   | `/api/v1/ai/combine_fc`                                            | Staff | FE gửi `ff_id`, `fb_id`. BE gửi `url_ff`, `url_fb`. `ff_has_hole`, `fb_has_hole` mặc định false |
+| POST   | `/api/v1/ai/shift_odd_rows`                                        | Staff | FE gửi `image_id`, `value`. BE gửi `url_image`, `value` |
+| POST   | `/api/v1/ai/create_kmo`                                            | Staff | FE gửi `image_id`. BE gửi `url_image`. `name_machine`, `gauge`, `width`, `rt`, `product_code`, `course_per_pixel`, `kmo_has_valve_chain` tùy chọn |
 | GET    | `/api/v1/colors/`                                                  | User  | System block (theo `display_order`) + custom block của user (theo `display_order`)           |
 | POST   | `/api/v1/colors/`                                                  | Staff | Tạo màu custom: `code`, `hex_value` bắt buộc; `name`, `display_order` optional               |
 | PATCH  | `/api/v1/colors/{id}/`                                             | Staff | Sửa màu custom (`code`, `hex_value`, `name`, `display_order`); id system → 400               |

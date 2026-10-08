@@ -291,24 +291,24 @@ def recall_smart_s(data: dict):
     payload = _with_optional_gauges(
         {
             "product_code": data["product_code"],
-            "path_svg": revision_png_url(data["svg_id"], field_name="svg_id"),
+            "url_svg": revision_png_url(data["svg_id"], field_name="svg_id"),
         },
         data,
     )
-    return recall_ai("/api/smart_s", payload)
+    return recall_ai("/api/v1/smart_s", payload)
 
 
 def recall_merge_images(data: dict):
-    image_paths = []
-    for index, revision_id in enumerate(data["image_ids"]):
-        image_paths.append(
-            revision_png_url(revision_id, field_name=f"image_ids[{index}]")
+    list_url_images = []
+    for index, revision_id in enumerate(data["list_image_ids"]):
+        list_url_images.append(
+            revision_png_url(revision_id, field_name=f"list_image_ids[{index}]")
         )
     return recall_ai(
-        "/api/merge_images",
+        "/api/v1/merge_images",
         {
             "product_code": data["product_code"],
-            "image_paths": image_paths,
+            "list_url_images": list_url_images,
             "background": data.get("background", "white"),
         },
     )
@@ -316,10 +316,10 @@ def recall_merge_images(data: dict):
 
 def recall_create_files_c(data: dict):
     return recall_ai(
-        "/api/create_files_c",
+        "/api/v1/create_files_c",
         {
-            "file_path": revision_png_url(data["file_id"], field_name="file_id"),
             "product_code": data["product_code"],
+            "url_image": revision_png_url(data["image_id"], field_name="image_id"),
         },
     )
 
@@ -328,14 +328,14 @@ def recall_create_file_p(data: dict):
     payload = _with_optional_gauges(
         {
             "product_code": data["product_code"],
-            "path_l": revision_png_url(data["l_id"], field_name="l_id"),
-            "path_r": revision_png_url(data["r_id"], field_name="r_id"),
-            "path_l_f": revision_png_url(data["l_f_id"], field_name="l_f_id"),
-            "path_r_f": revision_png_url(data["r_f_id"], field_name="r_f_id"),
+            "url_l": revision_png_url(data["l_id"], field_name="l_id"),
+            "url_r": revision_png_url(data["r_id"], field_name="r_id"),
+            "url_l_f": revision_png_url(data["l_f_id"], field_name="l_f_id"),
+            "url_r_f": revision_png_url(data["r_f_id"], field_name="r_f_id"),
         },
         data,
     )
-    return recall_ai("/api/create_file_p", payload)
+    return recall_ai("/api/v1/create_file_p", payload)
 
 
 def recall_ai_passthrough(path: str, data: dict):
@@ -344,39 +344,89 @@ def recall_ai_passthrough(path: str, data: dict):
 
 
 def recall_split_regions(data: dict):
-    return recall_ai_passthrough("/split_regions", data)
+    return recall_ai_passthrough("/api/v1/split_regions", data)
 
 
 def recall_rotate_svg(data: dict):
-    return recall_ai_passthrough("/rotate_svg", data)
+    return recall_ai_passthrough("/api/v1/rotate_svg", data)
 
 
 def recall_delete_paths(data: dict):
-    return recall_ai_passthrough("/delete_paths", data)
+    return recall_ai_passthrough("/api/v1/delete_paths", data)
 
 
 def recall_delete_anchors(data: dict):
-    return recall_ai_passthrough("/delete_anchors", data)
+    return recall_ai_passthrough("/api/v1/delete_anchors", data)
 
 
 def recall_color_paths(data: dict):
-    return recall_ai_passthrough("/color_paths", data)
+    return recall_ai_passthrough("/api/v1/color_paths", data)
 
 
 def recall_create_train_db(data: dict):
-    return recall_ai_passthrough("/create_train_db", data)
+    return recall_ai_passthrough("/api/v1/create_train_db", data)
 
 
 def recall_create_train_db_anchor(data: dict):
-    return recall_ai_passthrough("/create_train_db_anchor", data)
+    return recall_ai_passthrough("/api/v1/create_train_db_anchor", data)
 
 
 def recall_create_file_fc(data: dict):
     payload = {
         "product_code": data["product_code"],
         "count": data["count"],
-        "image_path": revision_png_url(data["image_id"], field_name="image_id"),
+        "url_image": revision_png_url(data["image_id"], field_name="image_id"),
     }
     if "type_machine" in data:
         payload["type_machine"] = data["type_machine"]
-    return recall_ai("/api/create_file_fc", payload)
+    return recall_ai("/api/v1/create_file_fc", payload)
+
+
+def _copy_present(data: dict, keys: tuple[str, ...]) -> dict:
+    return {key: data[key] for key in keys if key in data}
+
+
+def recall_auto_job(data: dict):
+    payload = _copy_present(data, ("product_code", "type_machine", "number_jackquard"))
+    payload["url_image"] = revision_png_url(data["image_id"], field_name="image_id")
+    return recall_ai("/api/v1/auto_job", payload)
+
+
+def recall_combine_fc(data: dict):
+    return recall_ai(
+        "/api/v1/combine_fc",
+        {
+            "product_code": data["product_code"],
+            "url_ff": revision_png_url(data["ff_id"], field_name="ff_id"),
+            "url_fb": revision_png_url(data["fb_id"], field_name="fb_id"),
+            "ff_has_hole": data.get("ff_has_hole", False),
+            "fb_has_hole": data.get("fb_has_hole", False),
+        },
+    )
+
+
+def recall_shift_odd_rows(data: dict):
+    return recall_ai(
+        "/api/v1/shift_odd_rows",
+        {
+            "url_image": revision_png_url(data["image_id"], field_name="image_id"),
+            "value": data["value"],
+        },
+    )
+
+
+def recall_create_kmo(data: dict):
+    payload = _copy_present(
+        data,
+        (
+            "name_machine",
+            "gauge",
+            "width",
+            "rt",
+            "product_code",
+            "course_per_pixel",
+            "kmo_has_valve_chain",
+        ),
+    )
+    payload["url_image"] = revision_png_url(data["image_id"], field_name="image_id")
+    return recall_ai("/api/v1/create_kmo", payload)
