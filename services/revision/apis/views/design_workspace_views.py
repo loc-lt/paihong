@@ -13,6 +13,7 @@ from core.responses import revision_conflict_response, success_response
 from core.serializers.design_serializers import (
     CompleteDesignFileRevisionSerializer,
     CreateDraftDesignFileSerializer,
+    RenameDraftDesignFileSerializer,
     DesignFileRevisionDetailSerializer,
     DesignFileSerializer,
     DesignFileRevisionSaveSerializer,
@@ -34,6 +35,7 @@ from core.utils import get_instance, global_response_errors
 from ..documents.design_documents import (
     create_draft_design_file_document,
     delete_draft_design_file_document,
+    rename_draft_design_file_document,
     reopen_design_file_document,
     design_file_autosave_document,
     design_file_complete_document,
@@ -171,22 +173,46 @@ class DesignWorkspaceViewSet(viewsets.ViewSet):
             status.HTTP_201_CREATED,
         )
 
-    @extend_schema(**delete_draft_design_file_document)
+    @extend_schema(methods=["PATCH"], **rename_draft_design_file_document)
+    @extend_schema(methods=["DELETE"], **delete_draft_design_file_document)
     @action(
         detail=True,
-        methods=["delete"],
+        methods=["patch", "delete"],
         url_path=r"steps/START_DESIGNING/drafts/(?P<file_type>[^/.]+)",
     )
-    def delete_draft(self, request, pk=None, file_type=None):
+    def draft_item(self, request, pk=None, file_type=None):
         require_design(request.user)
         part = get_instance(Part, pk)
         part_step = self._get_designing_part_step(part)
         design_file = self._get_design_file(part_step, file_type)
+        if request.method == "DELETE":
+            try:
+                delete_draft_design_file(design_file, user=request.user)
+            except ValidationError as exc:
+                return global_response_errors(exc.detail)
+            return success_response(None, "Draft file deleted successfully!")
+
+        serializer = RenameDraftDesignFileSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        if not serializer.is_valid():
+            return global_response_errors(serializer.errors)
         try:
-            delete_draft_design_file(design_file, user=request.user)
+            design_file = serializer.update_name(design_file=design_file)
         except ValidationError as exc:
             return global_response_errors(exc.detail)
-        return success_response(None, "Draft file deleted successfully!")
+        design_file = (
+            DesignFile.objects.select_related(
+                "workspace__part_step__part__source_document__work_item",
+                "latest_revision__snapshot_file",
+                "official_revision__snapshot_file",
+            ).get(pk=design_file.pk)
+        )
+        return success_response(
+            DesignFileSerializer(design_file).data,
+            "Draft file renamed successfully!",
+        )
 
     @extend_schema(**reopen_design_file_document)
     @action(

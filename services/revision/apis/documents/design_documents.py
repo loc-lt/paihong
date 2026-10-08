@@ -3,6 +3,7 @@ from drf_spectacular.utils import OpenApiResponse
 from core.openapi_params import TILE_VIEWPORT_QUERY_PARAMS, UUID_PATH_PARAM
 from core.serializers.design_serializers import (
     CreateDraftDesignFileSerializer,
+    RenameDraftDesignFileSerializer,
     DesignFileRevisionDetailSerializer,
     DesignFileSerializer,
     DesignFileTilesPatchSerializer,
@@ -50,6 +51,17 @@ reopen_design_file_document = {
     "responses": {200: DesignWorkspaceSerializer},
 }
 
+rename_draft_design_file_document = {
+    "summary": "Rename a draft file.",
+    "description": (
+        "JSON body requires `name`. Only draft files (`D1`, `D2`, …) can be renamed. "
+        "Main files S–KMO keep their generated display name."
+    ),
+    "parameters": [UUID_PATH_PARAM],
+    "request": RenameDraftDesignFileSerializer,
+    "responses": {200: DesignFileSerializer},
+}
+
 delete_draft_design_file_document = {
     "summary": "Delete a draft file.",
     "description": (
@@ -87,8 +99,12 @@ design_file_complete_document = {
     "description": (
         "Marks the latest revision official. For main files S–KMO, updates workspace "
         "progress and requires prior files to be done (e.g. complete S1 before C). "
-        "Draft files (`D1`, `D2`, …) skip that order check and do not change main-file "
-        "progress. Does not merge tiles, read `tile_manifest`, or repaint `preview_file`."
+        "Completing a main file also creates a new revision on the next file in "
+        "S → S1 → C → H → P → F → FC → KMO, with an empty tile snapshot at the same "
+        "grid size, and sets that next file to `in_progress` when it was `not_started`. "
+        "KMO has no next file. Draft files (`D1`, `D2`, …) skip that order check, do "
+        "not change main-file progress, and do not create a following revision. "
+        "Does not merge tiles or read `tile_manifest`."
     ),
     "parameters": [UUID_PATH_PARAM],
     "responses": {201: DesignFileRevisionDetailSerializer},

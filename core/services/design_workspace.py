@@ -123,6 +123,89 @@ def delete_draft_design_file(design_file: DesignFile, user=None) -> None:
     _delete_file_objects(file_object_ids)
 
 
+@transaction.atomic
+def rename_draft_design_file(*, design_file: DesignFile, name: str, user=None) -> DesignFile:
+    from rest_framework.exceptions import ValidationError
+
+    if not design_file.is_draft:
+        raise ValidationError({"file_type": "Only draft files can be renamed!"})
+    design_file.name = name
+    design_file.updated_by = user
+    design_file.save(update_fields=["name", "updated_by", "modified"])
+    return design_file
+
+
+def _next_sequence_file_type(file_type: str) -> str | None:
+    try:
+        index = DESIGN_FILE_SEQUENCE.index(file_type)
+    except ValueError:
+        return None
+    if index + 1 >= len(DESIGN_FILE_SEQUENCE):
+        return None
+    return DESIGN_FILE_SEQUENCE[index + 1]
+
+
+def _resolve_empty_grid_size(
+    workspace: DesignWorkspace,
+    *,
+    width: int,
+    height: int,
+) -> tuple[int, int]:
+    if width > 0 and height > 0:
+        return int(width), int(height)
+    grid = (workspace.settings or {}).get("grid") or {}
+    grid_width = int(grid.get("width") or 0)
+    grid_height = int(grid.get("height") or 0)
+    if grid_width > 0 and grid_height > 0:
+        return grid_width, grid_height
+    s_file = workspace.files.filter(file_type="S").first()
+    latest = _latest_design_file_revision(s_file) if s_file else None
+    if latest and latest.grid_width > 0 and latest.grid_height > 0:
+        return int(latest.grid_width), int(latest.grid_height)
+    return int(width or 0), int(height or 0)
+
+
+def _create_empty_next_file_revision(
+    *,
+    workspace: DesignWorkspace,
+    next_file_type: str,
+    width: int,
+    height: int,
+    user=None,
+) -> DesignFileRevision:
+    from core.services.design_grid.snapshot import create_empty_grid_snapshot
+
+    next_file = workspace.files.filter(file_type=next_file_type).first()
+    if next_file is None:
+        next_file = DesignFile.objects.create(
+            workspace=workspace,
+            file_type=next_file_type,
+            updated_by=user,
+        )
+    width, height = _resolve_empty_grid_size(workspace, width=width, height=height)
+    snapshot_file = create_empty_grid_snapshot(
+        width=width,
+        height=height,
+        created_by=user,
+    )
+    revision = create_design_file_revision(
+        design_file=next_file,
+        revision_type=RevisionTypeEnum.MANUAL.value,
+        layers=[],
+        grid_width=width,
+        grid_height=height,
+        snapshot_file=snapshot_file,
+        tile_manifest={},
+        user=user,
+    )
+    if width > 0 and height > 0:
+        refresh_design_file_revision_preview(revision=revision, user=user)
+    elif revision.preview_file_id:
+        revision.preview_file = None
+        revision.save(update_fields=["preview_file", "modified"])
+    return revision
+
+
 def _ensure_design_files(workspace: DesignWorkspace, user=None) -> None:
     existing = set(workspace.files.values_list("file_type", flat=True))
     for file_type in DESIGN_FILE_SEQUENCE:
@@ -331,10 +414,18 @@ def complete_design_file_revision(
         **(workspace.settings or {}),
         "progress": progress,
     }
-    if design_file.file_type == "S":
-        settings_update["active_file_type"] = "S1"
-        if progress.get("S1") == "not_started":
-            progress["S1"] = "in_progress"
+    next_file_type = _next_sequence_file_type(design_file.file_type)
+    if next_file_type:
+        _create_empty_next_file_revision(
+            workspace=workspace,
+            next_file_type=next_file_type,
+            width=revision.grid_width,
+            height=revision.grid_height,
+            user=user,
+        )
+        settings_update["active_file_type"] = next_file_type
+        if progress.get(next_file_type) == "not_started":
+            progress[next_file_type] = "in_progress"
             settings_update["progress"] = progress
     workspace.settings = settings_update
     workspace.updated_by = user

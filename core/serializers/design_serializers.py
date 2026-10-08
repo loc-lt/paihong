@@ -196,6 +196,30 @@ class CreateDraftDesignFileSerializer(serializers.Serializer):
         )
 
 
+class RenameDraftDesignFileSerializer(serializers.Serializer):
+    name = serializers.CharField(
+        max_length=255,
+        trim_whitespace=True,
+        allow_blank=False,
+        error_messages={
+            "required": "Draft name is required!",
+            "blank": "Draft name cannot be empty!",
+            "null": "Draft name is required!",
+            "invalid": "Draft name must be a string!",
+            "max_length": "Draft name cannot exceed 255 characters!",
+        },
+    )
+
+    def update_name(self, *, design_file):
+        from core.services.design_workspace import rename_draft_design_file
+
+        return rename_draft_design_file(
+            design_file=design_file,
+            name=self.validated_data["name"],
+            user=self.context["request"].user,
+        )
+
+
 class DesignFileRevisionSaveSerializer(serializers.Serializer):
     layers = DesignLayerSerializer(
         many=True,
