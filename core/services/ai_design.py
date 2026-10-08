@@ -168,10 +168,22 @@ def _ai_failure_response(
     )
 
 
-def revision_png_path(revision_id, *, field_name: str = "revision_id") -> str:
-    """Render a START_DESIGNING revision snapshot (gzip) to a PNG and return its path."""
+def revision_png_url(revision_id, *, field_name: str = "revision_id") -> str:
+    """Render a START_DESIGNING revision snapshot to PNG and return its public media URL."""
     from core.services.design_grid.preview import render_snapshot_preview_png
     from core.services.design_grid.snapshot import _load_snapshot
+    from core.services.file_storage import get_file_url
+
+    be_domain = (getattr(settings, "BE_DOMAIN", "") or "").rstrip("/")
+    if not be_domain:
+        raise ValidationError(
+            {
+                field_name: (
+                    "[config] BE_DOMAIN is empty. Set BE_DOMAIN in "
+                    "services/revision/.env so AI receives a full image URL!"
+                )
+            }
+        )
 
     try:
         revision = DesignFileRevision.objects.select_related(
@@ -240,25 +252,32 @@ def revision_png_path(revision_id, *, field_name: str = "revision_id") -> str:
             }
         ) from exc
 
-    if png_file.storage_backend != StorageBackendEnum.LOCAL.value:
+    disk_path = Path(settings.FILE_STORAGE_ROOT) / png_file.storage_key
+    if png_file.storage_backend == StorageBackendEnum.LOCAL.value and not disk_path.is_file():
         raise ValidationError(
             {
                 field_name: (
-                    f"[render_png][{field_name}] Revision {revision_id} image is not "
-                    f"on local storage (backend={png_file.storage_backend})!"
+                    f"[render_png][{field_name}] Rendered PNG was not saved at "
+                    f"{disk_path}!"
                 )
             }
         )
-    path = Path(settings.FILE_STORAGE_ROOT) / png_file.storage_key
-    if not path.is_file():
+
+    url = get_file_url(png_file.storage_key, png_file.storage_backend)
+    if not url or not url.startswith(("http://", "https://")):
         raise ValidationError(
             {
                 field_name: (
-                    f"[render_png][{field_name}] Rendered PNG was not saved at {path}!"
+                    f"[render_png][{field_name}] Could not build a full public URL "
+                    f"for revision {revision_id} (got {url!r})!"
                 )
             }
         )
-    return str(path)
+    return url
+
+
+# Keep the old name for any remaining imports.
+revision_png_path = revision_png_url
 
 
 def _with_optional_gauges(payload: dict, data: dict) -> dict:
@@ -272,7 +291,7 @@ def recall_smart_s(data: dict):
     payload = _with_optional_gauges(
         {
             "product_code": data["product_code"],
-            "path_svg": revision_png_path(data["svg_id"], field_name="svg_id"),
+            "path_svg": revision_png_url(data["svg_id"], field_name="svg_id"),
         },
         data,
     )
@@ -283,7 +302,7 @@ def recall_merge_images(data: dict):
     image_paths = []
     for index, revision_id in enumerate(data["image_ids"]):
         image_paths.append(
-            revision_png_path(revision_id, field_name=f"image_ids[{index}]")
+            revision_png_url(revision_id, field_name=f"image_ids[{index}]")
         )
     return recall_ai(
         "/api/merge_images",
@@ -299,7 +318,7 @@ def recall_create_files_c(data: dict):
     return recall_ai(
         "/api/create_files_c",
         {
-            "file_path": revision_png_path(data["file_id"], field_name="file_id"),
+            "file_path": revision_png_url(data["file_id"], field_name="file_id"),
             "product_code": data["product_code"],
         },
     )
@@ -309,10 +328,10 @@ def recall_create_file_p(data: dict):
     payload = _with_optional_gauges(
         {
             "product_code": data["product_code"],
-            "path_l": revision_png_path(data["l_id"], field_name="l_id"),
-            "path_r": revision_png_path(data["r_id"], field_name="r_id"),
-            "path_l_f": revision_png_path(data["l_f_id"], field_name="l_f_id"),
-            "path_r_f": revision_png_path(data["r_f_id"], field_name="r_f_id"),
+            "path_l": revision_png_url(data["l_id"], field_name="l_id"),
+            "path_r": revision_png_url(data["r_id"], field_name="r_id"),
+            "path_l_f": revision_png_url(data["l_f_id"], field_name="l_f_id"),
+            "path_r_f": revision_png_url(data["r_f_id"], field_name="r_f_id"),
         },
         data,
     )

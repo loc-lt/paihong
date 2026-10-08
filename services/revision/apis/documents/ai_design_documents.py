@@ -33,10 +33,12 @@ _AI_RESPONSES = {
 
 _ID_TO_PNG = (
     "Each revision id is a START_DESIGNING design-file revision. The backend reads "
-    "that revision's gzip snapshot, renders a PNG, and sends the saved PNG path to "
-    "the AI service. A successful AI JSON body is returned as-is. Failures are "
-    "wrapped as `{status:false, message:'[stage] …', data:{stage,…}}` so the "
-    "failing step is explicit."
+    "that revision's gzip snapshot, renders a PNG, and sends the public media URL "
+    "(`BE_DOMAIN` + `/media/...`, for example "
+    "`http://192.168.160.95:82/media/objects/...png`) to the AI service. "
+    "A successful AI JSON body is returned as-is. Failures are wrapped as "
+    "`{status:false, message:'[stage] …', data:{stage,…}}` so the failing step "
+    "is explicit."
 )
 
 smart_s_document = {
