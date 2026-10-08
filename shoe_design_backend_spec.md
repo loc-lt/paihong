@@ -303,7 +303,7 @@ Grid body **không** lưu trong PostgreSQL rows — snapshot + tile blobs trên 
 
 | Model                 | Ghi chú                                                                   |
 | --------------------- | ------------------------------------------------------------------------- |
-| `ColorDefinition`     | System palette: `code`, `hex_value`, `name`, `display_order`, `is_system`. Chỉ **Admin/Developer** được thêm/sửa/xóa qua `/system_colors`; user khác chỉ load |
+| `ColorDefinition`     | System palette: `code`, `hex_value`, `name`, `display_order`, `is_system`, `is_svg`, `is_pixel`. 8 màu đầu SVG+pixel, 8 màu sau chỉ pixel. Chỉ **Admin/Developer** được thêm/sửa/xóa qua `/system_colors` |
 | `UserColorPreference` | Chỉ màu **custom** của user: `code`, `custom_hex`, `custom_name`, `display_order`. Không còn override màu system (đã bỏ FK `color_definition`, migration `0008`) |
 
 Cả 2 model dùng chung tên field sắp xếp `display_order` (migration `0009` đổi `ColorDefinition.default_order` → `display_order`).
@@ -603,13 +603,13 @@ FE: chọn name → các gauge là `needles_per_inch` phân biệt trong spec c�
 | POST   | `/api/v1/ai/combine_fc`                                            | Staff | FE gửi `ff_id`, `fb_id`. BE gửi `url_ff`, `url_fb`. `ff_has_hole`, `fb_has_hole` mặc định false |
 | POST   | `/api/v1/ai/shift_odd_rows`                                        | Staff | FE gửi `image_id`, `value`. BE gửi `url_image`, `value` |
 | POST   | `/api/v1/ai/create_kmo`                                            | Staff | FE gửi `image_id`. BE gửi `url_image`. `name_machine`, `gauge`, `width`, `rt`, `product_code`, `course_per_pixel`, `kmo_has_valve_chain` tùy chọn |
-| GET    | `/api/v1/colors/`                                                  | User  | System block (theo `display_order`) + custom block của user (theo `display_order`)           |
-| POST   | `/api/v1/colors/`                                                  | Staff | Tạo màu custom: `code`, `hex_value` bắt buộc; `name`, `display_order` optional               |
+| GET    | `/api/v1/colors/`                                                  | User  | System + custom của user. Query `is_svg` / `is_pixel`: SVG (`is_svg=true`) tới BUILD_GRID; pixel (`is_pixel=true`) ở START_DESIGNING |
+| POST   | `/api/v1/colors/`                                                  | Staff | Tạo màu custom: `code`, `hex_value`, `is_svg`, `is_pixel` bắt buộc. SVG: `is_svg=true`, `is_pixel=false`. Pixel: ngược lại |
 | PATCH  | `/api/v1/colors/{id}/`                                             | Staff | Sửa màu custom (`code`, `hex_value`, `name`, `display_order`); id system → 400               |
 | DELETE | `/api/v1/colors/{id}/`                                             | Staff | Xóa màu custom; id system → 400                                                              |
-| GET    | `/api/v1/system_colors/`                                           | User  | Danh sách màu system                                                                         |
+| GET    | `/api/v1/system_colors/`                                           | User  | Danh sách màu system. Query `is_svg` / `is_pixel` giống `/colors`                            |
 | GET    | `/api/v1/system_colors/{id}/`                                      | User  | Chi tiết màu system                                                                          |
-| POST   | `/api/v1/system_colors/`                                           | Admin/Developer | Thêm màu system: `code`, `hex_value`, `name` bắt buộc; `display_order` optional    |
+| POST   | `/api/v1/system_colors/`                                           | Admin/Developer | Thêm màu system: `code`, `hex_value`, `name`, `is_svg`, `is_pixel` bắt buộc; `display_order` optional |
 | PATCH  | `/api/v1/system_colors/{id}/`                                      | Admin/Developer | Sửa `code`, `hex_value`, `name`, `display_order`                                   |
 | DELETE | `/api/v1/system_colors/{id}/`                                      | Admin/Developer | Xóa màu system                                                                     |
 

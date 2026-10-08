@@ -2,6 +2,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.exceptions import NotFound, ValidationError
 
+from core.filters import ColorDefinitionFilter, UserColorPreferenceFilter
 from core.models import ColorDefinition, UserColorPreference
 from core.permissions import require_design, require_system_color_admin
 from core.responses import success_response
@@ -42,7 +43,15 @@ def _get_custom_color(user, pk):
 class ColorViewSet(viewsets.ViewSet):
     @extend_schema(**list_colors_document)
     def list(self, request):
-        merged = build_merged_palette(request.user)
+        system_colors = ColorDefinitionFilter(
+            request.query_params,
+            queryset=ColorDefinition.objects.filter(is_system=True),
+        ).qs
+        custom_colors = UserColorPreferenceFilter(
+            request.query_params,
+            queryset=UserColorPreference.objects.filter(user=request.user),
+        ).qs
+        merged = build_merged_palette(system_colors, custom_colors)
         return success_response(
             MergedColorSerializer(merged, many=True).data,
             "Colors retrieved successfully!",
@@ -99,9 +108,12 @@ class ColorViewSet(viewsets.ViewSet):
 class SystemColorViewSet(viewsets.ViewSet):
     @extend_schema(**list_system_colors_document)
     def list(self, request):
-        colors = ColorDefinition.objects.filter(is_system=True).order_by(
-            "display_order", "code"
-        )
+        colors = ColorDefinitionFilter(
+            request.query_params,
+            queryset=ColorDefinition.objects.filter(is_system=True).order_by(
+                "display_order", "code"
+            ),
+        ).qs
         return success_response(
             ColorDefinitionSerializer(colors, many=True).data,
             "System colors retrieved successfully!",

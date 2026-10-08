@@ -21,6 +21,8 @@ class ColorDefinitionSerializer(serializers.ModelSerializer):
             "name",
             "display_order",
             "is_system",
+            "is_svg",
+            "is_pixel",
         ]
         read_only_fields = fields
 
@@ -37,6 +39,8 @@ class UserColorPreferenceSerializer(serializers.ModelSerializer):
             "hex_value",
             "name",
             "display_order",
+            "is_svg",
+            "is_pixel",
             "created",
             "modified",
         ]
@@ -53,6 +57,8 @@ class MergedColorSerializer(serializers.Serializer):
     )
     is_system = serializers.BooleanField()
     is_custom = serializers.BooleanField()
+    is_svg = serializers.BooleanField()
+    is_pixel = serializers.BooleanField()
 
 
 def _validate_hex(value: str) -> str:
@@ -74,6 +80,36 @@ HEX_VALUE_ERROR_MESSAGES = {
     "blank": "Hex value cannot be empty!",
     "null": "Hex value is required!",
 }
+
+
+def _group_bool(label: str, *, required: bool) -> serializers.BooleanField:
+    messages = {
+        "invalid": f"{label} must be true or false!",
+        "null": f"{label} is required!" if required else f"{label} must be true or false!",
+    }
+    if required:
+        messages["required"] = f"{label} is required!"
+    return serializers.BooleanField(required=required, error_messages=messages)
+
+
+def _validate_color_group(attrs, *, exactly_one: bool) -> None:
+    is_svg = attrs.get("is_svg")
+    is_pixel = attrs.get("is_pixel")
+    if is_svg is None or is_pixel is None:
+        return
+    if not is_svg and not is_pixel:
+        raise serializers.ValidationError(
+            {"is_svg": "A color must belong to the SVG group, the pixel group, or both!"}
+        )
+    if exactly_one and is_svg and is_pixel:
+        raise serializers.ValidationError(
+            {
+                "is_svg": (
+                    "A custom color is either SVG (is_svg true, is_pixel false) "
+                    "or pixel (is_svg false, is_pixel true)!"
+                )
+            }
+        )
 
 
 class SystemColorWriteSerializer(serializers.Serializer):
@@ -98,6 +134,8 @@ class SystemColorWriteSerializer(serializers.Serializer):
         max_value=POSITIVE_SMALL_INTEGER_MAX_VALUE,
         default=0,
     )
+    is_svg = _group_bool("is_svg", required=True)
+    is_pixel = _group_bool("is_pixel", required=True)
 
     def validate_hex_value(self, value):
         return _validate_hex(value)
@@ -105,6 +143,10 @@ class SystemColorWriteSerializer(serializers.Serializer):
     def validate(self, attrs):
         if self.partial and not attrs:
             raise serializers.ValidationError("At least one field is required!")
+        if self.instance and self.partial:
+            attrs["is_svg"] = attrs.get("is_svg", self.instance.is_svg)
+            attrs["is_pixel"] = attrs.get("is_pixel", self.instance.is_pixel)
+        _validate_color_group(attrs, exactly_one=False)
         exclude_pk = self.instance.pk if self.instance else None
         if "code" in attrs and system_code_exists(code=attrs["code"], exclude_pk=exclude_pk):
             raise serializers.ValidationError(
@@ -159,24 +201,35 @@ class UserColorPreferenceCreateSerializer(serializers.Serializer):
         max_value=POSITIVE_SMALL_INTEGER_MAX_VALUE,
         default=0,
     )
+    is_svg = _group_bool("is_svg", required=True)
+    is_pixel = _group_bool("is_pixel", required=True)
 
     def validate_hex_value(self, value):
         return _validate_hex(value)
 
     def validate(self, attrs):
+        _validate_color_group(attrs, exactly_one=True)
         user = self.context["request"].user
         code = attrs["code"]
         hex_value = attrs["hex_value"]
-        if custom_code_exists(user=user, code=code):
+        is_svg = attrs["is_svg"]
+        is_pixel = attrs["is_pixel"]
+        if custom_code_exists(
+            user=user, code=code, is_svg=is_svg, is_pixel=is_pixel
+        ):
             raise serializers.ValidationError(
-                {"code": "Color code already exists in your custom colors!"}
+                {"code": "Color code already exists in this color group!"}
             )
-        if custom_hex_exists(user=user, hex_value=hex_value):
+        if custom_hex_exists(
+            user=user,
+            hex_value=hex_value,
+            is_svg=is_svg,
+            is_pixel=is_pixel,
+        ):
             raise serializers.ValidationError(
                 {
                     "hex_value": (
-                        "Hex value already exists in system colors "
-                        "or your custom colors!"
+                        "Hex value already exists in this color group!"
                     )
                 }
             )
@@ -189,6 +242,8 @@ class UserColorPreferenceCreateSerializer(serializers.Serializer):
             custom_hex=validated_data["hex_value"],
             custom_name=validated_data.get("name") or "",
             display_order=validated_data.get("display_order") or 0,
+            is_svg=validated_data["is_svg"],
+            is_pixel=validated_data["is_pixel"],
         )
 
 
@@ -210,6 +265,8 @@ class UserColorPreferenceUpdateSerializer(serializers.Serializer):
         min_value=0,
         max_value=POSITIVE_SMALL_INTEGER_MAX_VALUE,
     )
+    is_svg = _group_bool("is_svg", required=False)
+    is_pixel = _group_bool("is_pixel", required=False)
 
     def validate_hex_value(self, value):
         return _validate_hex(value)
@@ -221,18 +278,31 @@ class UserColorPreferenceUpdateSerializer(serializers.Serializer):
         instance = self.instance
         code = attrs.get("code", instance.code)
         hex_value = attrs.get("hex_value", instance.custom_hex)
-        if custom_code_exists(user=user, code=code, exclude_pk=instance.pk):
+        is_svg = attrs.get("is_svg", instance.is_svg)
+        is_pixel = attrs.get("is_pixel", instance.is_pixel)
+        _validate_color_group(
+            {"is_svg": is_svg, "is_pixel": is_pixel},
+            exactly_one=True,
+        )
+        if custom_code_exists(
+            user=user,
+            code=code,
+            is_svg=is_svg,
+            is_pixel=is_pixel,
+            exclude_pk=instance.pk,
+        ):
             raise serializers.ValidationError(
-                {"code": "Color code already exists in your custom colors!"}
+                {"code": "Color code already exists in this color group!"}
             )
-        if custom_hex_exists(user=user, hex_value=hex_value, exclude_pk=instance.pk):
+        if custom_hex_exists(
+            user=user,
+            hex_value=hex_value,
+            is_svg=is_svg,
+            is_pixel=is_pixel,
+            exclude_pk=instance.pk,
+        ):
             raise serializers.ValidationError(
-                {
-                    "hex_value": (
-                        "Hex value already exists in system colors "
-                        "or your custom colors!"
-                    )
-                }
+                {"hex_value": "Hex value already exists in this color group!"}
             )
         return attrs
 
@@ -245,5 +315,9 @@ class UserColorPreferenceUpdateSerializer(serializers.Serializer):
             instance.custom_name = validated_data["name"] or ""
         if "display_order" in validated_data:
             instance.display_order = validated_data["display_order"]
+        if "is_svg" in validated_data:
+            instance.is_svg = validated_data["is_svg"]
+        if "is_pixel" in validated_data:
+            instance.is_pixel = validated_data["is_pixel"]
         instance.save()
         return instance

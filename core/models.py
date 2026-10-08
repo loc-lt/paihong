@@ -720,6 +720,8 @@ class ColorDefinition(TimeStampedModel):
     name = models.CharField(max_length=100, null=False, blank=False)
     display_order = models.PositiveSmallIntegerField(default=0, null=False, blank=False)
     is_system = models.BooleanField(null=False, default=True)
+    is_svg = models.BooleanField(null=False, default=False)
+    is_pixel = models.BooleanField(null=False, default=False)
 
     class Meta:
         db_table = "color_definition"
@@ -744,14 +746,16 @@ class UserColorPreference(TimeStampedModel):
     custom_hex = models.CharField(max_length=7, null=False, blank=False)
     custom_name = models.CharField(max_length=100, null=False, blank=True, default="")
     display_order = models.PositiveSmallIntegerField(default=0, null=False, blank=False)
+    is_svg = models.BooleanField(null=False, default=False)
+    is_pixel = models.BooleanField(null=False, default=True)
 
     class Meta:
         db_table = "user_color_preference"
         ordering = ["display_order", "created"]
         constraints = [
             models.UniqueConstraint(
-                fields=["user", "code"],
-                name="uq_user_color_code",
+                fields=["user", "code", "is_svg", "is_pixel"],
+                name="uq_user_color_code_group",
             ),
         ]
 

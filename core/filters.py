@@ -2,7 +2,15 @@ from datetime import date
 
 from django_filters import rest_framework as filters
 
-from core.models import Notification, Part, SourceDocument, StepRevision, WorkItem
+from core.models import (
+    ColorDefinition,
+    Notification,
+    Part,
+    SourceDocument,
+    StepRevision,
+    UserColorPreference,
+    WorkItem,
+)
 
 
 class NotificationFilter(filters.FilterSet):
@@ -91,3 +99,46 @@ class StepRevisionFilter(filters.FilterSet):
     class Meta:
         model = StepRevision
         fields = ["revision_type"]
+
+
+def _parse_filter_bool(value):
+    text = (value or "").strip().lower()
+    if not text:
+        return None, True
+    if text in {"true", "1"}:
+        return True, True
+    if text in {"false", "0"}:
+        return False, True
+    return None, False
+
+
+def _apply_bool_filter(queryset, field_name, value):
+    parsed, ok = _parse_filter_bool(value)
+    if not ok:
+        return queryset.none()
+    if parsed is None:
+        return queryset
+    return queryset.filter(**{field_name: parsed})
+
+
+class _ColorGroupFilterMixin:
+    is_svg = filters.CharFilter(method="filter_is_svg")
+    is_pixel = filters.CharFilter(method="filter_is_pixel")
+
+    def filter_is_svg(self, queryset, name, value):
+        return _apply_bool_filter(queryset, "is_svg", value)
+
+    def filter_is_pixel(self, queryset, name, value):
+        return _apply_bool_filter(queryset, "is_pixel", value)
+
+
+class ColorDefinitionFilter(_ColorGroupFilterMixin, filters.FilterSet):
+    class Meta:
+        model = ColorDefinition
+        fields = ["is_svg", "is_pixel"]
+
+
+class UserColorPreferenceFilter(_ColorGroupFilterMixin, filters.FilterSet):
+    class Meta:
+        model = UserColorPreference
+        fields = ["is_svg", "is_pixel"]
