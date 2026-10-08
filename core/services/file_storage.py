@@ -2,6 +2,7 @@ import hashlib
 import mimetypes
 import os
 import tempfile
+import uuid
 from pathlib import Path
 
 from django.conf import settings
@@ -141,6 +142,41 @@ def read_file_object_bytes(file_object: FileObject) -> bytes:
     raise NotImplementedError(
         "Reading file bytes is only supported for local storage backend."
     )
+
+
+def store_unique_bytes(
+    content: bytes,
+    *,
+    filename: str,
+    created_by=None,
+) -> FileObject:
+    """Store a new object even when another file has the same bytes."""
+    backend = get_storage_backend()
+    extension = Path(filename).suffix.lstrip(".").lower()
+    mime_type = mimetypes.guess_type(filename)[0] or ""
+    suffix = f".{extension}" if extension else ""
+    object_id = uuid.uuid4().hex
+    storage_key = f"objects/{object_id[:2]}/{object_id}{suffix}"
+
+    with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+        temp_file.write(content)
+        temp_path = temp_file.name
+    try:
+        sha256 = compute_sha256(temp_path)
+        size_bytes = os.path.getsize(temp_path)
+        backend.save(temp_path, storage_key)
+        return FileObject.objects.create(
+            storage_backend=backend.backend_type(),
+            storage_key=storage_key,
+            extension=extension,
+            mime_type=mime_type,
+            size_bytes=size_bytes,
+            sha256=sha256,
+            created_by=created_by,
+        )
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
 
 
 def store_bytes_content(

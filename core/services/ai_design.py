@@ -203,7 +203,7 @@ def _ai_output_root() -> str:
 
 def _publish_ai_image_path(value: str) -> str:
     """Copy one AI filesystem image into object storage and return its public URL."""
-    from core.services.file_storage import get_file_url, store_bytes_content
+    from core.services.file_storage import get_file_url, store_unique_bytes
 
     root = _ai_output_root()
     if not value.startswith(root + "/"):
@@ -219,7 +219,7 @@ def _publish_ai_image_path(value: str) -> str:
             ),
             value,
         )
-    stored = store_bytes_content(file_path.read_bytes(), filename=file_path.name)
+    stored = store_unique_bytes(file_path.read_bytes(), filename=file_path.name)
     url = get_file_url(stored.storage_key, stored.storage_backend)
     if not url or not str(url).startswith(("http://", "https://")):
         raise AiOutputFileError(
