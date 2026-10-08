@@ -336,3 +336,47 @@ def recall_create_file_p(data: dict):
         data,
     )
     return recall_ai("/api/create_file_p", payload)
+
+
+def recall_ai_passthrough(path: str, data: dict):
+    """Forward the validated FE body to AI without rewriting paths."""
+    return recall_ai(path, dict(data))
+
+
+def recall_split_regions(data: dict):
+    return recall_ai_passthrough("/split_regions", data)
+
+
+def recall_rotate_svg(data: dict):
+    return recall_ai_passthrough("/rotate_svg", data)
+
+
+def recall_delete_paths(data: dict):
+    return recall_ai_passthrough("/delete_paths", data)
+
+
+def recall_delete_anchors(data: dict):
+    return recall_ai_passthrough("/delete_anchors", data)
+
+
+def recall_color_paths(data: dict):
+    return recall_ai_passthrough("/color_paths", data)
+
+
+def recall_create_train_db(data: dict):
+    return recall_ai_passthrough("/create_train_db", data)
+
+
+def recall_create_train_db_anchor(data: dict):
+    return recall_ai_passthrough("/create_train_db_anchor", data)
+
+
+def recall_create_file_fc(data: dict):
+    payload = {
+        "product_code": data["product_code"],
+        "count": data["count"],
+        "image_path": revision_png_url(data["image_id"], field_name="image_id"),
+    }
+    if "type_machine" in data:
+        payload["type_machine"] = data["type_machine"]
+    return recall_ai("/api/create_file_fc", payload)

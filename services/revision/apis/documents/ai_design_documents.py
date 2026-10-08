@@ -1,9 +1,13 @@
 from drf_spectacular.utils import OpenApiResponse
 
 from core.serializers.ai_design_serializers import (
+    AiFilePathProductCodeSerializer,
     AiServiceResponseSerializer,
+    CreateFileFcRequestSerializer,
     CreateFilePRequestSerializer,
     CreateFilesCRequestSerializer,
+    CreateTrainDbAnchorRequestSerializer,
+    CreateTrainDbRequestSerializer,
     MergeImagesRequestSerializer,
     SmartSRequestSerializer,
 )
@@ -39,6 +43,11 @@ _ID_TO_PNG = (
     "A successful AI JSON body is returned as-is. Failures are wrapped as "
     "`{status:false, message:'[stage] …', data:{stage,…}}` so the failing step "
     "is explicit."
+)
+
+_PASSTHROUGH_PATH = (
+    "FE sends the image/SVG path in `file_path` directly. The backend forwards the "
+    "validated body to the AI service unchanged."
 )
 
 smart_s_document = {
@@ -89,5 +98,80 @@ create_file_p_document = {
         + _ID_TO_PNG
     ),
     "request": CreateFilePRequestSerializer,
+    "responses": _AI_RESPONSES,
+}
+
+split_regions_document = {
+    "tags": ["AI design files"],
+    "summary": "Split regions",
+    "description": f"Recall `AI_DOMAIN/split_regions`. {_PASSTHROUGH_PATH}",
+    "request": AiFilePathProductCodeSerializer,
+    "responses": _AI_RESPONSES,
+}
+
+rotate_svg_document = {
+    "tags": ["AI design files"],
+    "summary": "Rotate SVG",
+    "description": f"Recall `AI_DOMAIN/rotate_svg`. {_PASSTHROUGH_PATH}",
+    "request": AiFilePathProductCodeSerializer,
+    "responses": _AI_RESPONSES,
+}
+
+delete_paths_document = {
+    "tags": ["AI design files"],
+    "summary": "Delete paths",
+    "description": f"Recall `AI_DOMAIN/delete_paths`. {_PASSTHROUGH_PATH}",
+    "request": AiFilePathProductCodeSerializer,
+    "responses": _AI_RESPONSES,
+}
+
+delete_anchors_document = {
+    "tags": ["AI design files"],
+    "summary": "Delete anchors",
+    "description": f"Recall `AI_DOMAIN/delete_anchors`. {_PASSTHROUGH_PATH}",
+    "request": AiFilePathProductCodeSerializer,
+    "responses": _AI_RESPONSES,
+}
+
+color_paths_document = {
+    "tags": ["AI design files"],
+    "summary": "Color paths",
+    "description": f"Recall `AI_DOMAIN/color_paths`. {_PASSTHROUGH_PATH}",
+    "request": AiFilePathProductCodeSerializer,
+    "responses": _AI_RESPONSES,
+}
+
+create_train_db_document = {
+    "tags": ["AI design files"],
+    "summary": "Create train DB",
+    "description": (
+        "Recall `AI_DOMAIN/create_train_db`. FE sends `file_path`, `index_list` "
+        "(path indices), and `type` directly. The backend forwards the body unchanged."
+    ),
+    "request": CreateTrainDbRequestSerializer,
+    "responses": _AI_RESPONSES,
+}
+
+create_train_db_anchor_document = {
+    "tags": ["AI design files"],
+    "summary": "Create train DB anchors",
+    "description": (
+        "Recall `AI_DOMAIN/create_train_db_anchor`. FE sends `file_path` and "
+        "`index_list` as pairs `[path_index, point_index]`. The backend forwards "
+        "the body unchanged."
+    ),
+    "request": CreateTrainDbAnchorRequestSerializer,
+    "responses": _AI_RESPONSES,
+}
+
+create_file_fc_document = {
+    "tags": ["AI design files"],
+    "summary": "Create file FC / finalize P",
+    "description": (
+        "Recall `AI_DOMAIN/api/create_file_fc`. FE sends `image_id` instead of "
+        "`image_path`. `type_machine` is optional. "
+        + _ID_TO_PNG
+    ),
+    "request": CreateFileFcRequestSerializer,
     "responses": _AI_RESPONSES,
 }

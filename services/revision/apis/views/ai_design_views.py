@@ -9,24 +9,44 @@ from rest_framework.response import Response
 
 from core.permissions import require_design
 from core.serializers.ai_design_serializers import (
+    AiFilePathProductCodeSerializer,
+    CreateFileFcRequestSerializer,
     CreateFilePRequestSerializer,
     CreateFilesCRequestSerializer,
+    CreateTrainDbAnchorRequestSerializer,
+    CreateTrainDbRequestSerializer,
     MergeImagesRequestSerializer,
     SmartSRequestSerializer,
 )
 from core.services.ai_design import (
+    recall_color_paths,
+    recall_create_file_fc,
     recall_create_file_p,
     recall_create_files_c,
+    recall_create_train_db,
+    recall_create_train_db_anchor,
+    recall_delete_anchors,
+    recall_delete_paths,
     recall_merge_images,
+    recall_rotate_svg,
     recall_smart_s,
+    recall_split_regions,
 )
 from core.utils import global_response_errors
 
 from ..documents.ai_design_documents import (
+    color_paths_document,
+    create_file_fc_document,
     create_file_p_document,
     create_files_c_document,
+    create_train_db_anchor_document,
+    create_train_db_document,
+    delete_anchors_document,
+    delete_paths_document,
     merge_images_document,
+    rotate_svg_document,
     smart_s_document,
+    split_regions_document,
 )
 
 logger = logging.getLogger(__name__)
@@ -82,3 +102,47 @@ class AiDesignViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="create_file_p")
     def create_file_p(self, request):
         return self._recall(request, CreateFilePRequestSerializer, recall_create_file_p)
+
+    @extend_schema(**split_regions_document)
+    @action(detail=False, methods=["post"], url_path="split_regions")
+    def split_regions(self, request):
+        return self._recall(request, AiFilePathProductCodeSerializer, recall_split_regions)
+
+    @extend_schema(**rotate_svg_document)
+    @action(detail=False, methods=["post"], url_path="rotate_svg")
+    def rotate_svg(self, request):
+        return self._recall(request, AiFilePathProductCodeSerializer, recall_rotate_svg)
+
+    @extend_schema(**delete_paths_document)
+    @action(detail=False, methods=["post"], url_path="delete_paths")
+    def delete_paths(self, request):
+        return self._recall(request, AiFilePathProductCodeSerializer, recall_delete_paths)
+
+    @extend_schema(**delete_anchors_document)
+    @action(detail=False, methods=["post"], url_path="delete_anchors")
+    def delete_anchors(self, request):
+        return self._recall(request, AiFilePathProductCodeSerializer, recall_delete_anchors)
+
+    @extend_schema(**color_paths_document)
+    @action(detail=False, methods=["post"], url_path="color_paths")
+    def color_paths(self, request):
+        return self._recall(request, AiFilePathProductCodeSerializer, recall_color_paths)
+
+    @extend_schema(**create_train_db_document)
+    @action(detail=False, methods=["post"], url_path="create_train_db")
+    def create_train_db(self, request):
+        return self._recall(request, CreateTrainDbRequestSerializer, recall_create_train_db)
+
+    @extend_schema(**create_train_db_anchor_document)
+    @action(detail=False, methods=["post"], url_path="create_train_db_anchor")
+    def create_train_db_anchor(self, request):
+        return self._recall(
+            request,
+            CreateTrainDbAnchorRequestSerializer,
+            recall_create_train_db_anchor,
+        )
+
+    @extend_schema(**create_file_fc_document)
+    @action(detail=False, methods=["post"], url_path="create_file_fc")
+    def create_file_fc(self, request):
+        return self._recall(request, CreateFileFcRequestSerializer, recall_create_file_fc)

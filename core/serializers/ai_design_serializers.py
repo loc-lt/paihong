@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from core.constant import INTEGER_FIELD_MAX_VALUE
+
 
 def _required_text(label: str, *, max_length: int) -> serializers.CharField:
     return serializers.CharField(
@@ -92,3 +94,106 @@ class CreateFilePRequestSerializer(serializers.Serializer):
     wales_per_inch = _optional_number("Wales per inch")
     courses_per_cm = _optional_number("Courses per cm")
     courses_per_pixel = _optional_number("Courses per pixel")
+
+
+class AiFilePathProductCodeSerializer(serializers.Serializer):
+    """FE passes the image/SVG path directly; BE forwards it to AI unchanged."""
+
+    file_path = _required_text("File path", max_length=2000)
+    product_code = _required_text("Product code", max_length=255)
+
+
+class CreateTrainDbRequestSerializer(serializers.Serializer):
+    file_path = _required_text("File path", max_length=2000)
+    index_list = serializers.ListField(
+        allow_empty=False,
+        child=serializers.IntegerField(
+            min_value=0,
+            max_value=INTEGER_FIELD_MAX_VALUE,
+            error_messages={
+                "invalid": "Each index must be an integer!",
+                "min_value": "Each index must be at least 0!",
+                "max_value": "Each index is too large!",
+                "max_string_length": "Each index is too large!",
+                "null": "Each index must be an integer!",
+            },
+        ),
+        error_messages={
+            "required": "Index list is required!",
+            "null": "Index list is required!",
+            "not_a_list": "Index list must be a list!",
+            "invalid": "Index list must be a list!",
+            "empty": "Index list cannot be empty!",
+        },
+    )
+    type = _required_text("Type", max_length=255)
+
+
+class CreateTrainDbAnchorRequestSerializer(serializers.Serializer):
+    file_path = _required_text("File path", max_length=2000)
+    index_list = serializers.ListField(
+        allow_empty=False,
+        child=serializers.ListField(
+            child=serializers.IntegerField(
+                min_value=0,
+                max_value=INTEGER_FIELD_MAX_VALUE,
+                error_messages={
+                    "invalid": "Each anchor index must be an integer!",
+                    "min_value": "Each anchor index must be at least 0!",
+                    "max_value": "Each anchor index is too large!",
+                    "max_string_length": "Each anchor index is too large!",
+                    "null": "Each anchor index must be an integer!",
+                },
+            ),
+            min_length=2,
+            max_length=2,
+            error_messages={
+                "not_a_list": "Each anchor index must be a [path_index, point_index] pair!",
+                "invalid": "Each anchor index must be a [path_index, point_index] pair!",
+                "empty": "Each anchor index must be a [path_index, point_index] pair!",
+                "min_length": "Each anchor index must be a [path_index, point_index] pair!",
+                "max_length": "Each anchor index must be a [path_index, point_index] pair!",
+                "null": "Each anchor index must be a [path_index, point_index] pair!",
+            },
+        ),
+        error_messages={
+            "required": "Index list is required!",
+            "null": "Index list is required!",
+            "not_a_list": "Index list must be a list!",
+            "invalid": "Index list must be a list!",
+            "empty": "Index list cannot be empty!",
+        },
+    )
+
+
+class CreateFileFcRequestSerializer(serializers.Serializer):
+    product_code = _required_text("Product code", max_length=255)
+    count = serializers.IntegerField(
+        min_value=0,
+        max_value=INTEGER_FIELD_MAX_VALUE,
+        error_messages={
+            "required": "Count is required!",
+            "null": "Count is required!",
+            "invalid": "Count must be an integer!",
+            "min_value": "Count must be at least 0!",
+            "max_value": "Count is too large!",
+            "max_string_length": "Count is too large!",
+        },
+    )
+    image_id = _required_revision_id("Image revision id")
+    type_machine = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        max_length=255,
+        trim_whitespace=True,
+        error_messages={
+            "invalid": "Machine type must be a string!",
+            "max_length": "Machine type cannot exceed 255 characters!",
+        },
+    )
+
+    def validate_type_machine(self, value):
+        if value is None:
+            return None
+        return value
