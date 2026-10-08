@@ -137,6 +137,7 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 BE_DOMAIN = os.getenv("BE_DOMAIN", "").rstrip("/")
 AI_DOMAIN = os.getenv("AI_DOMAIN", "").rstrip("/")
+AI_OUTPUT_ROOT = os.getenv("AI_OUTPUT_ROOT", "/home/devserver/paihong/ai").rstrip("/")
 
 # Object Storage: LOCAL=1, S3=4, MINIO=3 (via S3-compatible endpoint)
 OBJECT_STORAGE_BACKEND = int(os.getenv("OBJECT_STORAGE_BACKEND", "1"))

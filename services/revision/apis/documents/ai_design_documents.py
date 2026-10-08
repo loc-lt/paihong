@@ -31,7 +31,7 @@ _AI_RESPONSES = {
     502: OpenApiResponse(
         description=(
             "Config, connect, or AI failure. `message` starts with `[config]`, "
-            "`[ai_connect]`, or `[ai_response]`. `data` includes `stage`, `ai_url`, "
+            "`[ai_connect]`, `[ai_response]`, or `[ai_files]`. `data` includes `stage`, `ai_url`, "
             "`ai_status`, `ai_body`, and `request_payload` when available."
         )
     ),
@@ -45,7 +45,10 @@ _ID_TO_PNG = (
     "that revision's gzip snapshot, renders a PNG, and sends the public media URL "
     "(`BE_DOMAIN` + `/media/...`, for example "
     "`http://192.168.160.95:82/media/objects/...png`) to the AI service. "
-    "A successful AI JSON body is returned as-is. Failures are wrapped as "
+    "A successful AI JSON body keeps the same fields. Image paths on the AI "
+    "machine (for example `/home/devserver/paihong/ai/.../*.png`) are copied into "
+    "this service's media storage and replaced with `BE_DOMAIN` + `/media/...` "
+    "URLs. Failures are wrapped as "
     "`{status:false, message:'[stage] …', data:{stage,…}}` so the failing step "
     "is explicit."
 )

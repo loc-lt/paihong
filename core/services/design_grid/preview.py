@@ -57,8 +57,8 @@ def _composite_cell_color(
             continue
         ranked.append(
             (
-                z_orders.get(color_code, 0),
                 int(paint.get("order") or 1),
+                z_orders.get(color_code, 0),
                 color_code,
             )
         )
@@ -102,13 +102,16 @@ def render_snapshot_preview_png(
 
     hidden_colors, z_orders = _layer_visibility_maps(layers)
     cell_paints: dict[tuple[int, int], list] = defaultdict(list)
-    for hex_value in (payload.get("tiles") or {}).values():
-        if not isinstance(hex_value, str):
+    tiles = payload.get("tiles") or {}
+    decoded_tiles = 0
+    for hex_value in tiles.values():
+        if not isinstance(hex_value, str) or not hex_value:
             continue
         try:
             tile = decode_tile_bytes(stored_tile_bytes(hex_value))
         except (ValueError, TypeError):
             continue
+        decoded_tiles += 1
         for key, paints in (tile.get("cells") or {}).items():
             if not isinstance(key, str) or "," not in key or not isinstance(paints, list):
                 continue
@@ -119,6 +122,12 @@ def render_snapshot_preview_png(
                 continue
             if 0 <= x < width and 0 <= y < height:
                 cell_paints[(x, y)].extend(paints)
+
+    if tiles and decoded_tiles == 0:
+        raise ValueError(
+            "Snapshot tiles could not be decoded. Each tile must be "
+            "base64(gzip(JSON)) or base64(JSON) with a cells object."
+        )
 
     image = Image.new("RGB", (width, height), (255, 255, 255))
     pixels = image.load()

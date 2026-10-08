@@ -15,6 +15,23 @@ from core.models import DesignFileRevision
 logger = logging.getLogger(__name__)
 
 AI_RECALL_TIMEOUT_SECONDS = 300
+_AI_IMAGE_SUFFIXES = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".gif",
+    ".bmp",
+    ".svg",
+    ".tif",
+    ".tiff",
+}
+
+
+class AiOutputFileError(Exception):
+    def __init__(self, message: str, source_path: str):
+        super().__init__(message)
+        self.source_path = source_path
 
 
 def _error_response(
@@ -78,6 +95,18 @@ def recall_ai(path: str, payload: dict):
             if 200 <= response.status < 300:
                 parsed, text = _parse_ai_body(raw)
                 if parsed is not None:
+                    try:
+                        parsed = publish_ai_output_images(parsed)
+                    except AiOutputFileError as exc:
+                        return _error_response(
+                            stage="ai_files",
+                            message=str(exc),
+                            http_status=status.HTTP_502_BAD_GATEWAY,
+                            ai_path=path,
+                            ai_url=ai_url,
+                            source_path=exc.source_path,
+                            request_payload=payload,
+                        )
                     return Response(parsed, status=response.status)
                 return _error_response(
                     stage="ai_response",
@@ -168,9 +197,52 @@ def _ai_failure_response(
     )
 
 
+def _ai_output_root() -> str:
+    return (getattr(settings, "AI_OUTPUT_ROOT", "") or "/home/devserver/paihong/ai").rstrip("/")
+
+
+def _publish_ai_image_path(value: str) -> str:
+    """Copy one AI filesystem image into object storage and return its public URL."""
+    from core.services.file_storage import get_file_url, store_bytes_content
+
+    root = _ai_output_root()
+    if not value.startswith(root + "/"):
+        return value
+    if Path(value).suffix.lower() not in _AI_IMAGE_SUFFIXES:
+        return value
+    file_path = Path(value)
+    if not file_path.is_file():
+        raise AiOutputFileError(
+            (
+                f"Cannot read AI output image at {value}. "
+                f"Mount {root} into the revision service at the same path."
+            ),
+            value,
+        )
+    stored = store_bytes_content(file_path.read_bytes(), filename=file_path.name)
+    url = get_file_url(stored.storage_key, stored.storage_backend)
+    if not url or not str(url).startswith(("http://", "https://")):
+        raise AiOutputFileError(
+            f"Stored {file_path.name} but BE_DOMAIN did not produce a public URL (got {url!r}).",
+            value,
+        )
+    return url
+
+
+def publish_ai_output_images(node):
+    """Replace AI filesystem image paths with this service's media URLs. Other fields stay."""
+    if isinstance(node, str):
+        return _publish_ai_image_path(node)
+    if isinstance(node, list):
+        return [publish_ai_output_images(item) for item in node]
+    if isinstance(node, dict):
+        return {key: publish_ai_output_images(value) for key, value in node.items()}
+    return node
+
+
 def revision_png_url(revision_id, *, field_name: str = "revision_id") -> str:
     """Render a START_DESIGNING revision snapshot to PNG and return its public media URL."""
-    from core.services.design_grid.preview import render_snapshot_preview_png
+    from core.services.design_grid.preview import refresh_design_file_revision_preview
     from core.services.design_grid.snapshot import _load_snapshot
     from core.services.file_storage import get_file_url
 
@@ -188,6 +260,7 @@ def revision_png_url(revision_id, *, field_name: str = "revision_id") -> str:
     try:
         revision = DesignFileRevision.objects.select_related(
             "snapshot_file",
+            "preview_file",
             "design_file__workspace__part_step__step",
         ).get(pk=revision_id)
     except DesignFileRevision.DoesNotExist:
@@ -229,10 +302,10 @@ def revision_png_url(revision_id, *, field_name: str = "revision_id") -> str:
         ) from exc
 
     try:
-        png_file = render_snapshot_preview_png(
-            snapshot_file=revision.snapshot_file,
-            layers=revision.layers,
-        )
+        revision = refresh_design_file_revision_preview(revision=revision)
+        png_file = revision.preview_file
+        if png_file is None:
+            raise ValueError("Preview PNG was not stored on the revision.")
     except ValueError as exc:
         raise ValidationError(
             {
