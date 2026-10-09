@@ -49,8 +49,10 @@ class AiServiceResponseSerializer(serializers.Serializer):
 
 
 class SmartSRequestSerializer(serializers.Serializer):
+    """Forwarded to AI unchanged. url_svg is an image URL, not a revision id."""
+
     product_code = _required_text("Product code", max_length=255)
-    svg_id = _required_revision_id("SVG revision id")
+    url_svg = _required_text("SVG URL", max_length=2000)
     wales_per_inch = _optional_number("Wales per inch")
     courses_per_cm = _optional_number("Courses per cm")
     courses_per_pixel = _optional_number("Courses per pixel")
@@ -277,13 +279,37 @@ class ShiftOddRowsRequestSerializer(serializers.Serializer):
     )
 
 
+def _required_int_list(label: str) -> serializers.ListField:
+    return serializers.ListField(
+        allow_empty=False,
+        child=serializers.IntegerField(
+            min_value=0,
+            max_value=INTEGER_FIELD_MAX_VALUE,
+            error_messages={
+                "invalid": f"Each {label} value must be an integer!",
+                "min_value": f"Each {label} value must be at least 0!",
+                "max_value": f"Each {label} value is too large!",
+                "max_string_length": f"Each {label} value is too large!",
+                "null": f"Each {label} value must be an integer!",
+            },
+        ),
+        error_messages={
+            "required": f"{label} is required!",
+            "null": f"{label} is required!",
+            "not_a_list": f"{label} must be a list!",
+            "invalid": f"{label} must be a list!",
+            "empty": f"{label} cannot be empty!",
+        },
+    )
+
+
 class CreateKmoRequestSerializer(serializers.Serializer):
-    image_id = _required_revision_id("Image revision id")
     name_machine = _optional_text("Machine name")
     gauge = _optional_int("Gauge")
     width = _optional_int("Width")
     rt = _optional_int("RT")
-    product_code = _optional_text("Product code")
+    product_code = _required_text("Product code", max_length=255)
+    file_jc_id = _required_revision_id("JC file revision id")
     course_per_pixel = _optional_int("Course per pixel")
     kmo_has_valve_chain = serializers.BooleanField(
         required=False,
@@ -293,3 +319,76 @@ class CreateKmoRequestSerializer(serializers.Serializer):
             "invalid": "KMO has valve chain must be true or false!",
         },
     )
+    file_f_id = _required_revision_id("F file revision id")
+    barrenzahl = serializers.IntegerField(
+        min_value=1,
+        max_value=INTEGER_FIELD_MAX_VALUE,
+        error_messages={
+            "required": "Barrenzahl is required!",
+            "null": "Barrenzahl is required!",
+            "invalid": "Barrenzahl must be an integer!",
+            "min_value": "Barrenzahl must be at least 1!",
+            "max_value": "Barrenzahl is too large!",
+            "max_string_length": "Barrenzahl is too large!",
+        },
+    )
+    barrentyp = _required_int_list("Barrentyp")
+    zul_max_kg = _required_int_list("Zul max kg")
+    max_versatzsprung = _required_int_list("Max versatzsprung")
+    max_ueberlegungssprung = _required_int_list("Max ueberlegungssprung")
+    kg_pattern = serializers.ListField(
+        allow_empty=False,
+        child=serializers.ListField(
+            allow_empty=False,
+            child=serializers.ListField(
+                child=serializers.IntegerField(
+                    min_value=0,
+                    max_value=INTEGER_FIELD_MAX_VALUE,
+                    error_messages={
+                        "invalid": "Each KG pattern value must be an integer!",
+                        "min_value": "Each KG pattern value must be at least 0!",
+                        "max_value": "Each KG pattern value is too large!",
+                        "max_string_length": "Each KG pattern value is too large!",
+                        "null": "Each KG pattern value must be an integer!",
+                    },
+                ),
+                min_length=2,
+                max_length=2,
+                error_messages={
+                    "not_a_list": "Each KG pattern entry must be a pair of integers!",
+                    "invalid": "Each KG pattern entry must be a pair of integers!",
+                    "min_length": "Each KG pattern entry must be a pair of integers!",
+                    "max_length": "Each KG pattern entry must be a pair of integers!",
+                    "null": "Each KG pattern entry must be a pair of integers!",
+                },
+            ),
+            error_messages={
+                "not_a_list": "Each KG pattern row must be a list of pairs!",
+                "invalid": "Each KG pattern row must be a list of pairs!",
+                "empty": "Each KG pattern row cannot be empty!",
+                "null": "Each KG pattern row must be a list of pairs!",
+            },
+        ),
+        error_messages={
+            "required": "KG pattern is required!",
+            "null": "KG pattern is required!",
+            "not_a_list": "KG pattern must be a list!",
+            "invalid": "KG pattern must be a list!",
+            "empty": "KG pattern cannot be empty!",
+        },
+    )
+
+    def validate(self, attrs):
+        count = attrs["barrenzahl"]
+        for key in (
+            "barrentyp",
+            "zul_max_kg",
+            "max_versatzsprung",
+            "max_ueberlegungssprung",
+            "kg_pattern",
+        ):
+            if len(attrs[key]) != count:
+                raise serializers.ValidationError(
+                    {key: f"{key} must contain {count} items!"}
+                )
+        return attrs
