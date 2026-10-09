@@ -6,17 +6,18 @@ from rest_framework.exceptions import ValidationError
 from core.constant import PartStatusEnum, SourceDocumentStatusEnum
 from core.models import Part
 from core.services.ai_design import AiOutputFileError, fetch_ai_json, store_ai_output_file
-from core.services.file_storage import get_file_url
+from core.services.file_storage import get_file_url, read_file_object_bytes, store_bytes_content
 from core.services.part_workflow import (
     bootstrap_completed_part_steps,
     ensure_work_item_template,
     initialize_part_steps,
 )
 from core.services.pick_upper_candidates import build_pick_upper_candidates
+from core.services.source_document_converter import FileToSvgConverter
 
 
-def _split_source_document_svgs(source_document, user=None) -> list:
-    """Call AI split_regions and store every list_svg file."""
+def store_svg_files_from_split_regions(source_document, user=None) -> list:
+    """Copy AI split_regions list_svg into object storage. Does not create parts."""
     file_object = source_document.file
     url_path = get_file_url(file_object.storage_key, file_object.storage_backend)
     if not url_path or not str(url_path).startswith(("http://", "https://")):
@@ -45,39 +46,57 @@ def _split_source_document_svgs(source_document, user=None) -> list:
     return stored
 
 
-def detect_parts_from_source_document(source_document, user=None) -> tuple[list, list[dict]]:
+def detect_parts_from_source_document(source_document, user=None) -> list[dict]:
     """
-    Split a source PDF through AI and build one Part per SVG in list_svg.
+    Convert a source document (PDF/AI/DXF) into one Part per SVG region.
     """
+    file_object = source_document.file
+    file_bytes = read_file_object_bytes(file_object)
+    filename = source_document.original_filename
+
     try:
-        svg_files = _split_source_document_svgs(source_document, user=user)
-    except AiOutputFileError as exc:
+        list_svg, list_texts, _svg_full = FileToSvgConverter.process_file(
+            file_bytes, filename
+        )
+    except ValueError as exc:
         raise ValidationError({"file": str(exc)}) from exc
 
-    filename = source_document.original_filename
+    if not list_svg:
+        raise ValidationError(
+            {"file": "No parts could be extracted from the source file!"}
+        )
+
     base_name = os.path.splitext(filename)[0] or "Part"
     extension = os.path.splitext(filename)[1].lower()
-    multi_part = len(svg_files) > 1
+    multi_part = len(list_svg) > 1
 
     parts_data = []
-    for index, svg_file in enumerate(svg_files, start=1):
+    for index, svg_str in enumerate(list_svg, start=1):
+        preview_file = store_bytes_content(
+            svg_str.encode("utf-8"),
+            filename=f"{base_name}_part_{index}.svg",
+            created_by=user,
+        )
         name = f"{base_name} - Part {index}" if multi_part else base_name
+        texts = list_texts[index - 1] if index - 1 < len(list_texts) else []
+        detected_metadata = {
+            "source": "file_converter",
+            "source_document_id": str(source_document.id),
+            "page_index": index,
+            "total_pages": len(list_svg),
+            "original_filename": filename,
+            "texts": texts,
+        }
         parts_data.append(
             {
                 "sequence": index,
                 "name": name,
-                "preview_file": svg_file,
+                "preview_file": preview_file,
                 "source_page": index if extension in (".pdf", ".ai") else None,
-                "detected_metadata": {
-                    "source": "split_regions",
-                    "source_document_id": str(source_document.id),
-                    "page_index": index,
-                    "total_pages": len(svg_files),
-                    "original_filename": filename,
-                },
+                "detected_metadata": detected_metadata,
             }
         )
-    return svg_files, parts_data
+    return parts_data
 
 
 @transaction.atomic
@@ -127,7 +146,8 @@ def process_source_document_with_ai(
     bootstrap_steps: bool = True,
 ) -> list[Part]:
     try:
-        svg_files, parts_data = detect_parts_from_source_document(
+        svg_files = store_svg_files_from_split_regions(source_document, user=user)
+        parts_data = detect_parts_from_source_document(
             source_document,
             user=user,
         )

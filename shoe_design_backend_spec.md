@@ -346,7 +346,7 @@ Grid snapshot và `layers[]` dùng `color_code` dạng `#RRGGBB` (không dùng U
 1. Validate `item_code` unique.
 2. Tạo `WorkItem` + gán workflow template.
 3. Với mỗi file: `create_source_document()` → lưu `FileObject`.
-4. `process_source_document_with_ai()` → gọi thẳng `AI_DOMAIN/api/v1/split_regions` (không đi qua API backend `/ai/split_regions`). Body: `url_path` là URL public của PDF, `product_code` là `item_code`. Lưu mọi file trong `list_svg` vào object storage và gán `source_document.svg_files`. Mỗi SVG = 1 Part.
+4. `process_source_document_with_ai()` → part detection vẫn dùng `FileToSvgConverter` (mỗi vùng SVG = 1 Part). Riêng `svg_files` lấy từ AI `split_regions`: gọi thẳng `AI_DOMAIN/api/v1/split_regions`, lưu `list_svg` vào object storage rồi gán `source_document.svg_files`.
 5. `initialize_part_steps()` + `bootstrap_completed_part_steps()`.
 
 **Response** (`ProcessWorkItemResultSerializer`):
@@ -363,17 +363,18 @@ Grid snapshot và `layers[]` dùng `color_code` dạng `#RRGGBB` (không dùng U
 
 ### 6.2 Part detection
 
-`core/services/part_detection.py` gọi AI `POST /api/v1/split_regions`:
+Chia part giữ nguyên `FileToSvgConverter` + `source_document_converter.py`:
 
-1. Gửi URL public của file PDF (`BE_DOMAIN` + storage key) và `product_code` = `work_item.item_code`.
-2. Đọc `data.list_svg` (đường dẫn trên máy AI, ví dụ `/home/devserver/paihong/ai/.../string_1.svg`).
-3. Copy từng file vào object storage, tên `{sha256}_{tên file AI}`. Gán vào `source_document.svg_files`.
-4. **Mỗi SVG = 1 Part**, `preview_file` trỏ cùng file đó.
-5. Khởi tạo PartStep từ template.
-6. Bootstrap bước 1 (xem §6.3).
-7. Lỗi → `SourceDocument.status = FAILED`, raise ValidationError.
+1. Đọc bytes từ `FileObject`.
+2. `FileToSvgConverter` convert PDF/AI/DXF → danh sách SVG vùng + text.
+3. **Mỗi SVG vùng = 1 Part**, lưu SVG làm `preview_file`.
+4. Khởi tạo PartStep từ template.
+5. Bootstrap bước 1 (xem §6.3).
+6. Lỗi → `SourceDocument.status = FAILED`, raise ValidationError.
 
-Design service cần mount `/home/devserver/paihong/ai` và `AI_DOMAIN` trong `.env` để đọc file AI trả về.
+`svg_files` là việc riêng, thay cho `svg_file` cũ: gọi thẳng `AI_DOMAIN/api/v1/split_regions` với URL public của PDF và `product_code` = `item_code`, copy `data.list_svg` vào object storage (`{sha256}_{tên file AI}`), gán vào `source_document.svg_files`. `list_region` không dùng để tạo part.
+
+Design service cần mount `/home/devserver/paihong/ai` và `AI_DOMAIN` trong `.env` để đọc file AI trả về. Dependencies design service: `pymupdf`, `ezdxf`, `matplotlib`.
 
 ### 6.3 Bootstrap step 1
 
