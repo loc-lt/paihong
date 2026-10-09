@@ -48,8 +48,10 @@ _ID_TO_PNG = (
     "A successful AI JSON body keeps the same fields. Image paths on the AI "
     "machine (for example `/home/devserver/paihong/ai/.../*.png`) are copied into "
     "this service's media storage and replaced with `BE_DOMAIN` + `/media/...` "
-    "URLs. The stored name keeps the SHA-256 and appends the AI filename: "
-    "`/media/objects/{sha256[:2]}/{sha256}_{original}.png`. Failures are wrapped as "
+    "URLs. PNG and `.kmo` paths are both copied. The stored name keeps the SHA-256 "
+    "and appends the AI filename. Spaces and `#` in that name are percent-encoded "
+    "in the public URL (`%20`, `%23`) so the browser requests the whole file. "
+    "Failures are wrapped as "
     "`{status:false, message:'[stage] …', data:{stage,…}}` so the failing step "
     "is explicit."
 )
@@ -66,7 +68,9 @@ smart_s_document = {
         "Recall `AI_DOMAIN/api/v1/smart_s`. FE sends the AI body unchanged: "
         "`product_code`, `url_svg` (image URL, not a revision id), and optional "
         "`wales_per_inch`, `courses_per_cm`, `courses_per_pixel`. The backend "
-        "forwards that body as-is."
+        "forwards that body as-is. Image paths in the AI response are copied into "
+        "object storage. The public URL percent-encodes spaces and `#` in the "
+        "original filename."
     ),
     "request": SmartSRequestSerializer,
     "responses": _AI_RESPONSES,

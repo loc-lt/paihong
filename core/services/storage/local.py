@@ -1,6 +1,7 @@
 import os
 import shutil
 from pathlib import Path
+from urllib.parse import quote
 
 from django.conf import settings
 
@@ -33,9 +34,10 @@ class LocalStorageBackend(StorageBackend):
     def get_url(self, storage_key: str) -> str:
         domain = getattr(settings, "BE_DOMAIN", "")
         media_url = getattr(settings, "MEDIA_URL", "/media/")
+        encoded_key = quote(storage_key, safe="/")
         if domain:
-            return f"{domain}{media_url}{storage_key}"
-        return f"{media_url}{storage_key}"
+            return f"{domain}{media_url}{encoded_key}"
+        return f"{media_url}{encoded_key}"
 
     def backend_type(self) -> int:
         return StorageBackendEnum.LOCAL.value

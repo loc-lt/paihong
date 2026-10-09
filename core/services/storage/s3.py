@@ -1,4 +1,5 @@
 import os
+from urllib.parse import quote
 
 from django.conf import settings
 
@@ -38,7 +39,7 @@ class S3StorageBackend(StorageBackend):
     def get_url(self, storage_key: str) -> str:
         custom_domain = getattr(settings, "AWS_S3_CUSTOM_DOMAIN", "")
         if custom_domain:
-            return f"https://{custom_domain}/{storage_key}"
+            return f"https://{custom_domain}/{quote(storage_key, safe='/')}"
         return self.client.generate_presigned_url(
             "get_object",
             Params={"Bucket": self.bucket, "Key": storage_key},

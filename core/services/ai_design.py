@@ -15,7 +15,7 @@ from core.models import DesignFileRevision
 logger = logging.getLogger(__name__)
 
 AI_RECALL_TIMEOUT_SECONDS = 300
-_AI_IMAGE_SUFFIXES = {
+_AI_OUTPUT_SUFFIXES = {
     ".png",
     ".jpg",
     ".jpeg",
@@ -25,6 +25,7 @@ _AI_IMAGE_SUFFIXES = {
     ".svg",
     ".tif",
     ".tiff",
+    ".kmo",
 }
 
 
@@ -255,8 +256,8 @@ def store_ai_output_file(value: str, *, created_by=None):
     root = _ai_output_root()
     if not isinstance(value, str) or not value.startswith(root + "/"):
         raise AiOutputFileError(f"AI output path is outside {root}: {value}", str(value))
-    if Path(value).suffix.lower() not in _AI_IMAGE_SUFFIXES:
-        raise AiOutputFileError(f"AI output is not an image file: {value}", value)
+    if Path(value).suffix.lower() not in _AI_OUTPUT_SUFFIXES:
+        raise AiOutputFileError(f"AI output file type is not stored: {value}", value)
     file_path = Path(value)
     if not file_path.is_file():
         raise AiOutputFileError(
@@ -280,7 +281,7 @@ def _publish_ai_image_path(value: str) -> str:
     root = _ai_output_root()
     if not value.startswith(root + "/"):
         return value
-    if Path(value).suffix.lower() not in _AI_IMAGE_SUFFIXES:
+    if Path(value).suffix.lower() not in _AI_OUTPUT_SUFFIXES:
         return value
     file_path = Path(value)
     stored = store_ai_output_file(value)
