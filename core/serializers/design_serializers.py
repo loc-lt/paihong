@@ -457,6 +457,69 @@ class DesignFileTilesPatchSerializer(serializers.Serializer):
         return revision
 
 
+class InitializeDesignFileRevisionSerializer(serializers.Serializer):
+    tiles = TileUpdateSerializer(many=True, required=False, default=list)
+    grid_width = serializers.IntegerField(
+        min_value=1,
+        max_value=INTEGER_FIELD_MAX_VALUE,
+        error_messages={
+            "required": "Grid width is required!",
+            "null": "Grid width is required!",
+            "invalid": "Grid width must be an integer!",
+            "min_value": "Grid width must be at least 1!",
+            "max_value": "Grid width is too large!",
+            "max_string_length": "Grid width is too large!",
+        },
+        help_text="Grid width of the first revision.",
+    )
+    grid_height = serializers.IntegerField(
+        min_value=1,
+        max_value=INTEGER_FIELD_MAX_VALUE,
+        error_messages={
+            "required": "Grid height is required!",
+            "null": "Grid height is required!",
+            "invalid": "Grid height must be an integer!",
+            "min_value": "Grid height must be at least 1!",
+            "max_value": "Grid height is too large!",
+            "max_string_length": "Grid height is too large!",
+        },
+        help_text="Grid height of the first revision.",
+    )
+
+    def validate(self, attrs):
+        from core.services.design_grid.tile_codec import validate_tile_origin
+
+        grid_width = attrs["grid_width"]
+        grid_height = attrs["grid_height"]
+        for item in attrs.get("tiles") or []:
+            try:
+                validate_tile_origin(
+                    tile_key=item["key"],
+                    grid_width=grid_width,
+                    grid_height=grid_height,
+                    tile_size=GRID_TILE_SIZE,
+                )
+            except ValueError as exc:
+                raise serializers.ValidationError(
+                    {"tiles": f"Tile {item['key']}: {exc}"}
+                ) from exc
+        return attrs
+
+    def create_revision(self, *, design_file):
+        from core.services.design_workspace import initialize_design_file_revision
+
+        tile_updates = {
+            item["key"]: item["data"] for item in self.validated_data.get("tiles") or []
+        }
+        return initialize_design_file_revision(
+            design_file=design_file,
+            grid_width=self.validated_data["grid_width"],
+            grid_height=self.validated_data["grid_height"],
+            tile_updates=tile_updates,
+            user=self.context["request"].user,
+        )
+
+
 class CompleteDesignFileRevisionSerializer(serializers.Serializer):
     def complete(self, *, revision):
         from core.services.design_workspace import complete_design_file_revision

@@ -8,6 +8,7 @@ from core.serializers.design_serializers import (
     DesignFileSerializer,
     DesignFileTilesPatchSerializer,
     DesignFileTilesResponseSerializer,
+    InitializeDesignFileRevisionSerializer,
     DesignFileRevisionSaveSerializer,
     DesignWorkspaceSerializer,
 )
@@ -99,9 +100,10 @@ design_file_complete_document = {
     "description": (
         "Marks the latest revision official. For main files S–KMO, updates workspace "
         "progress and requires prior files to be done (e.g. complete S1 before C). "
-        "Completing a main file also creates a new revision on the next file in "
-        "S → S1 → C → H → P → F → FC → KMO, with an empty tile snapshot at the same "
-        "grid size, and sets that next file to `in_progress` when it was `not_started`. "
+        "Completing a main file also creates an empty-tile revision on the next file in "
+        "S → S1 → C → H → P → F → FC → KMO at the same grid size, and sets that next "
+        "file to `in_progress` when it was `not_started`. If the next file already has "
+        "a revision, that empty revision is not created. "
         "KMO has no next file. Draft files (`D1`, `D2`, …) skip that order check, do "
         "not change main-file progress, and do not create a following revision. "
         "Does not merge tiles or read `tile_manifest`."
@@ -120,6 +122,23 @@ get_design_file_tiles_document = {
     ),
     "parameters": [UUID_PATH_PARAM, *TILE_VIEWPORT_QUERY_PARAMS],
     "responses": {200: DesignFileTilesResponseSerializer},
+}
+
+initialize_design_file_revision_document = {
+    "summary": "Create the first revision of a design file with grid tiles.",
+    "description": (
+        "Use this when the file has no revision yet, so there is no "
+        "`design_file_revisions` id to PATCH. Body matches PATCH tiles: "
+        "`grid_width`, `grid_height`, and `tiles` (`key` + base64 `data`). "
+        "Creates revision 1, stores the tiles unchanged, and marks a main file "
+        "`in_progress` when it was `not_started`. "
+        "If the file already has a revision, returns 400 with that revision id — "
+        "PATCH `/design_file_revisions/{id}/tiles` instead. "
+        "Does not decompress tiles and does not draw a preview."
+    ),
+    "parameters": [UUID_PATH_PARAM],
+    "request": InitializeDesignFileRevisionSerializer,
+    "responses": {201: DesignFileRevisionDetailSerializer},
 }
 
 patch_design_file_tiles_document = {

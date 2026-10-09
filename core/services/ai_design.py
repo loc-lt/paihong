@@ -202,7 +202,7 @@ def _ai_output_root() -> str:
 
 
 def _publish_ai_image_path(value: str) -> str:
-    """Copy one AI filesystem image into object storage and return its public URL."""
+    """Copy one AI image into object storage as {sha256}_{original filename}."""
     from core.services.file_storage import get_file_url, store_unique_bytes
 
     root = _ai_output_root()

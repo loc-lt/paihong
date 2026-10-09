@@ -48,7 +48,8 @@ _ID_TO_PNG = (
     "A successful AI JSON body keeps the same fields. Image paths on the AI "
     "machine (for example `/home/devserver/paihong/ai/.../*.png`) are copied into "
     "this service's media storage and replaced with `BE_DOMAIN` + `/media/...` "
-    "URLs. Failures are wrapped as "
+    "URLs. The stored name keeps the SHA-256 and appends the AI filename: "
+    "`/media/objects/{sha256[:2]}/{sha256}_{original}.png`. Failures are wrapped as "
     "`{status:false, message:'[stage] …', data:{stage,…}}` so the failing step "
     "is explicit."
 )

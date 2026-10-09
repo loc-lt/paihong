@@ -18,6 +18,7 @@ from core.serializers.design_serializers import (
     DesignFileSerializer,
     DesignFileRevisionSaveSerializer,
     DesignFileTilesPatchSerializer,
+    InitializeDesignFileRevisionSerializer,
     DesignFileTilesQuerySerializer,
     DesignWorkspaceSerializer,
     RestoreDesignFileRevisionSerializer,
@@ -42,6 +43,7 @@ from ..documents.design_documents import (
     design_file_save_document,
     get_design_file_tiles_document,
     get_design_workspace_document,
+    initialize_design_file_revision_document,
     patch_design_file_tiles_document,
     restore_design_file_revision_document,
 )
@@ -123,15 +125,44 @@ class DesignWorkspaceViewSet(viewsets.ViewSet):
         }
         return success_response(data, "Design file retrieved successfully!")
 
+    @extend_schema(methods=["POST"], **initialize_design_file_revision_document)
     @action(
         detail=True,
-        methods=["get"],
+        methods=["get", "post"],
         url_path=r"steps/START_DESIGNING/files/(?P<file_type>[^/.]+)/revisions",
     )
     def file_revisions(self, request, pk=None, file_type=None):
         part = get_instance(Part, pk)
         part_step = self._get_designing_part_step(part)
         design_file = self._get_design_file(part_step, file_type)
+        if request.method == "POST":
+            require_design(request.user)
+            from core.services.design_files import is_grid_design_file
+
+            if not is_grid_design_file(design_file.file_type):
+                return global_response_errors(
+                    {"file_type": "Grid tiles API is only available for grid files!"}
+                )
+            serializer = InitializeDesignFileRevisionSerializer(
+                data=request.data,
+                context={"request": request},
+            )
+            if not serializer.is_valid():
+                return global_response_errors(serializer.errors)
+            try:
+                revision = serializer.create_revision(design_file=design_file)
+            except ValidationError as exc:
+                return global_response_errors(exc.detail)
+            revision = DesignFileRevision.objects.select_related(
+                "snapshot_file",
+                "preview_file",
+                "created_by",
+            ).get(pk=revision.pk)
+            return success_response(
+                DesignFileRevisionDetailSerializer(revision).data,
+                "Design file revision created successfully!",
+                status.HTTP_201_CREATED,
+            )
         revisions = (
             design_file.revisions.defer("tile_manifest")
             .select_related("snapshot_file", "preview_file", "created_by")

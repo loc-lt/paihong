@@ -2,7 +2,6 @@ import hashlib
 import mimetypes
 import os
 import tempfile
-import uuid
 from pathlib import Path
 
 from django.conf import settings
@@ -26,6 +25,22 @@ def build_storage_key(sha256: str, extension: str) -> str:
     ext = extension.lower().lstrip(".")
     suffix = f".{ext}" if ext else ""
     return f"objects/{sha256[:2]}/{sha256}{suffix}"
+
+
+def build_named_storage_key(sha256: str, original_filename: str) -> str:
+    """objects/{sha256[:2]}/{sha256}_{original basename, extension included}."""
+    basename = Path(str(original_filename).replace("\\", "/")).name
+    basename = basename.replace("\x00", "").strip()
+    if basename in {"", ".", ".."}:
+        basename = "file"
+    prefix = f"objects/{sha256[:2]}/{sha256}_"
+    max_name = 1000 - len(prefix)
+    if len(basename) > max_name:
+        suffix = Path(basename).suffix
+        stem = Path(basename).stem
+        keep = max_name - len(suffix)
+        basename = f"{stem[:keep]}{suffix}" if keep > 0 else basename[:max_name]
+    return f"{prefix}{basename}"
 
 
 def get_file_url(storage_key: str, storage_backend=None) -> str:
@@ -150,13 +165,10 @@ def store_unique_bytes(
     filename: str,
     created_by=None,
 ) -> FileObject:
-    """Store a new object even when another file has the same bytes."""
+    """Store bytes as objects/{sha256[:2]}/{sha256}_{original filename}."""
     backend = get_storage_backend()
     extension = Path(filename).suffix.lstrip(".").lower()
     mime_type = mimetypes.guess_type(filename)[0] or ""
-    suffix = f".{extension}" if extension else ""
-    object_id = uuid.uuid4().hex
-    storage_key = f"objects/{object_id[:2]}/{object_id}{suffix}"
 
     with tempfile.NamedTemporaryFile(delete=False) as temp_file:
         temp_file.write(content)
@@ -164,6 +176,10 @@ def store_unique_bytes(
     try:
         sha256 = compute_sha256(temp_path)
         size_bytes = os.path.getsize(temp_path)
+        storage_key = build_named_storage_key(sha256, filename)
+        existing = FileObject.objects.filter(storage_key=storage_key).first()
+        if existing:
+            return _reuse_existing_file_object(existing, source_path=temp_path)
         backend.save(temp_path, storage_key)
         return FileObject.objects.create(
             storage_backend=backend.backend_type(),

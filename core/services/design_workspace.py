@@ -182,6 +182,10 @@ def _create_empty_next_file_revision(
             file_type=next_file_type,
             updated_by=user,
         )
+    if next_file.latest_revision_id:
+        latest = _latest_design_file_revision(next_file)
+        if latest:
+            return latest
     width, height = _resolve_empty_grid_size(workspace, width=width, height=height)
     snapshot_file = create_empty_grid_snapshot(
         width=width,
@@ -382,6 +386,83 @@ def create_design_file_revision(
     design_file.updated_by = user
     design_file.save(update_fields=update_fields)
     return revision
+
+
+def _mark_design_file_in_progress(design_file: DesignFile, user=None) -> None:
+    if design_file.is_draft or design_file.file_type not in DESIGN_FILE_SEQUENCE:
+        return
+    workspace = design_file.workspace
+    settings = dict(workspace.settings or {})
+    progress = dict(settings.get("progress") or {})
+    if progress.get(design_file.file_type) == "done":
+        return
+    progress[design_file.file_type] = "in_progress"
+    settings["progress"] = progress
+    settings["active_file_type"] = design_file.file_type
+    workspace.settings = settings
+    workspace.updated_by = user
+    workspace.save(update_fields=["settings", "updated_by", "modified"])
+
+
+@transaction.atomic
+def initialize_design_file_revision(
+    *,
+    design_file: DesignFile,
+    grid_width: int,
+    grid_height: int,
+    tile_updates: dict[str, str],
+    user=None,
+) -> DesignFileRevision:
+    """Create revision 1 for a grid file that has no revision yet, then store tiles."""
+    from rest_framework.exceptions import ValidationError
+
+    from core.services.design_files import is_grid_design_file
+    from core.services.design_grid.snapshot import (
+        create_empty_grid_snapshot,
+        write_tiles_to_snapshot,
+    )
+
+    if not is_grid_design_file(design_file.file_type):
+        raise ValidationError(
+            {"file_type": "Grid tiles API is only available for grid files!"}
+        )
+    if design_file.latest_revision_id:
+        raise ValidationError(
+            {
+                "revision": (
+                    f"File {design_file.file_type} already has revision "
+                    f"{design_file.latest_revision_id}. "
+                    "PATCH /design_file_revisions/{id}/tiles instead."
+                )
+            }
+        )
+
+    snapshot_file = create_empty_grid_snapshot(
+        width=grid_width,
+        height=grid_height,
+        created_by=user,
+    )
+    if tile_updates:
+        snapshot_file = write_tiles_to_snapshot(
+            snapshot_file=snapshot_file,
+            tile_updates=tile_updates,
+            created_by=user,
+            grid_width=grid_width,
+            grid_height=grid_height,
+        )
+    revision = create_design_file_revision(
+        design_file=design_file,
+        revision_type=RevisionTypeEnum.MANUAL.value,
+        layers=[],
+        grid_width=grid_width,
+        grid_height=grid_height,
+        snapshot_file=snapshot_file,
+        tile_manifest={},
+        user=user,
+    )
+    _mark_design_file_in_progress(design_file, user=user)
+    return revision
+
 
 @transaction.atomic
 def complete_design_file_revision(
