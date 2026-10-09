@@ -59,7 +59,7 @@ def _work_item_detail_queryset():
         .order_by("source_document__sequence", "sequence")
     )
     source_documents_qs = (
-        SourceDocument.objects.select_related("file", "svg_file")
+        SourceDocument.objects.select_related("file").prefetch_related("svg_files")
         .prefetch_related(
             Prefetch("parts", queryset=parts_qs),
         )
@@ -168,9 +168,9 @@ class WorkItemViewSet(viewsets.ViewSet):
         work_item = get_instance(WorkItem, pk)
         queryset = SourceDocumentFilter(
             request.query_params,
-            queryset=work_item.source_documents.select_related(
-                "file", "svg_file"
-            ).order_by(
+            queryset=work_item.source_documents.select_related("file")
+            .prefetch_related("svg_files")
+            .order_by(
                 "sequence"
             ),
         ).qs

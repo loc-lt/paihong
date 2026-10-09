@@ -45,11 +45,14 @@ class PartSchema(AutoSchema):
 
 def _load_part_details(parts):
     ids = [part.pk for part in parts]
-    rows = Part.objects.select_related(
-        "preview_file",
-        "source_document__file",
-        "source_document__svg_file",
-    ).filter(pk__in=ids)
+    rows = (
+        Part.objects.select_related(
+            "preview_file",
+            "source_document__file",
+        )
+        .prefetch_related("source_document__svg_files")
+        .filter(pk__in=ids)
+    )
     by_id = {row.pk: row for row in rows}
     return [by_id[part_id] for part_id in ids]
 

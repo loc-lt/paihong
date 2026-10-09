@@ -201,9 +201,81 @@ def _ai_output_root() -> str:
     return (getattr(settings, "AI_OUTPUT_ROOT", "") or "/home/devserver/paihong/ai").rstrip("/")
 
 
+def fetch_ai_json(path: str, payload: dict) -> dict:
+    """POST JSON to AI_DOMAIN and return the parsed body. Raises ValidationError."""
+    domain = (getattr(settings, "AI_DOMAIN", "") or "").rstrip("/")
+    if not domain:
+        raise ValidationError(
+            {"ai": "AI_DOMAIN is empty. Set AI_DOMAIN in the service .env!"}
+        )
+    ai_url = f"{domain}{path}"
+    request = urllib.request.Request(
+        ai_url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=AI_RECALL_TIMEOUT_SECONDS) as response:
+            parsed, text = _parse_ai_body(response.read())
+    except TimeoutError as exc:
+        raise ValidationError(
+            {"ai": f"AI {path} timed out after {AI_RECALL_TIMEOUT_SECONDS}s!"}
+        ) from exc
+    except urllib.error.HTTPError as exc:
+        parsed, text = _parse_ai_body(exc.read())
+        message = None
+        if isinstance(parsed, dict):
+            message = parsed.get("message") or parsed.get("detail")
+        raise ValidationError(
+            {"ai": f"AI {path} returned {exc.code}: {message or text.strip() or 'request failed'}"}
+        ) from exc
+    except urllib.error.URLError as exc:
+        if isinstance(getattr(exc, "reason", None), TimeoutError):
+            raise ValidationError(
+                {"ai": f"AI {path} timed out after {AI_RECALL_TIMEOUT_SECONDS}s!"}
+            ) from exc
+        raise ValidationError(
+            {"ai": f"Cannot connect to AI {path}!"}
+        ) from exc
+
+    if not isinstance(parsed, dict):
+        raise ValidationError({"ai": f"AI {path} returned a non-JSON body!"})
+    if parsed.get("status") not in ("success", True):
+        raise ValidationError(
+            {"ai": str(parsed.get("message") or f"AI {path} did not succeed!")}
+        )
+    return parsed
+
+
+def store_ai_output_file(value: str, *, created_by=None):
+    """Copy one AI output file into object storage, keeping its original filename."""
+    from core.services.file_storage import store_unique_bytes
+
+    root = _ai_output_root()
+    if not isinstance(value, str) or not value.startswith(root + "/"):
+        raise AiOutputFileError(f"AI output path is outside {root}: {value}", str(value))
+    if Path(value).suffix.lower() not in _AI_IMAGE_SUFFIXES:
+        raise AiOutputFileError(f"AI output is not an image file: {value}", value)
+    file_path = Path(value)
+    if not file_path.is_file():
+        raise AiOutputFileError(
+            (
+                f"Cannot read AI output image at {value}. "
+                f"Mount {root} into this service at the same path."
+            ),
+            value,
+        )
+    return store_unique_bytes(
+        file_path.read_bytes(),
+        filename=file_path.name,
+        created_by=created_by,
+    )
+
+
 def _publish_ai_image_path(value: str) -> str:
     """Copy one AI image into object storage as {sha256}_{original filename}."""
-    from core.services.file_storage import get_file_url, store_unique_bytes
+    from core.services.file_storage import get_file_url
 
     root = _ai_output_root()
     if not value.startswith(root + "/"):
@@ -211,15 +283,7 @@ def _publish_ai_image_path(value: str) -> str:
     if Path(value).suffix.lower() not in _AI_IMAGE_SUFFIXES:
         return value
     file_path = Path(value)
-    if not file_path.is_file():
-        raise AiOutputFileError(
-            (
-                f"Cannot read AI output image at {value}. "
-                f"Mount {root} into the revision service at the same path."
-            ),
-            value,
-        )
-    stored = store_unique_bytes(file_path.read_bytes(), filename=file_path.name)
+    stored = store_ai_output_file(value)
     url = get_file_url(stored.storage_key, stored.storage_backend)
     if not url or not str(url).startswith(("http://", "https://")):
         raise AiOutputFileError(

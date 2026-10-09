@@ -37,6 +37,7 @@ services:
       - ./services/design/.env:/usr/src/service/.env
       - static_volume:/usr/src/service/static
       - media_volume:/usr/src/service/media
+      - /home/devserver/paihong/ai:/home/devserver/paihong/ai:ro
       - ./services/design/pyproject.toml:/usr/src/service/pyproject.toml
       - ./services/design/poetry.lock:/usr/src/service/poetry.lock
     ports:

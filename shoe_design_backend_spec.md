@@ -205,7 +205,8 @@ Index: `(status, -created)`.
 | Field                                                      | Ghi chú                 |
 | ---------------------------------------------------------- | ----------------------- |
 | `work_item`                                                | FK CASCADE              |
-| `file`                                                     | FK PROTECT → FileObject |
+| `file`                                                     | FK PROTECT → FileObject (PDF upload) |
+| `svg_files`                                                | M2M → FileObject. Các SVG trong `list_svg` sau khi gọi AI `split_regions` |
 | `sequence`                                                 | unique per work_item    |
 | `original_filename`, `document_type`, `status`, `metadata` |                         |
 
@@ -345,7 +346,7 @@ Grid snapshot và `layers[]` dùng `color_code` dạng `#RRGGBB` (không dùng U
 1. Validate `item_code` unique.
 2. Tạo `WorkItem` + gán workflow template.
 3. Với mỗi file: `create_source_document()` → lưu `FileObject`.
-4. `process_source_document_with_ai()` → part detection (hiện tại local converter, chưa gọi AI service).
+4. `process_source_document_with_ai()` → gọi thẳng `AI_DOMAIN/api/v1/split_regions` (không đi qua API backend `/ai/split_regions`). Body: `url_path` là URL public của PDF, `product_code` là `item_code`. Lưu mọi file trong `list_svg` vào object storage và gán `source_document.svg_files`. Mỗi SVG = 1 Part.
 5. `initialize_part_steps()` + `bootstrap_completed_part_steps()`.
 
 **Response** (`ProcessWorkItemResultSerializer`):
@@ -360,18 +361,19 @@ Grid snapshot và `layers[]` dùng `color_code` dạng `#RRGGBB` (không dùng U
 
 
 
-### 6.2 Part detection (stub AI)
+### 6.2 Part detection
 
-`core/services/part_detection.py` + `source_document_converter.py`:
+`core/services/part_detection.py` gọi AI `POST /api/v1/split_regions`:
 
-1. Đọc bytes từ `FileObject`.
-2. `FileToSvgConverter` convert PDF/AI/DXF → danh sách SVG string.
-3. **Mỗi SVG = 1 Part**, lưu SVG làm `preview_file`.
-4. Khởi tạo PartStep từ template.
-5. Bootstrap bước 1 (xem §6.3).
-6. Lỗi → `SourceDocument.status = FAILED`, raise ValidationError.
+1. Gửi URL public của file PDF (`BE_DOMAIN` + storage key) và `product_code` = `work_item.item_code`.
+2. Đọc `data.list_svg` (đường dẫn trên máy AI, ví dụ `/home/devserver/paihong/ai/.../string_1.svg`).
+3. Copy từng file vào object storage, tên `{sha256}_{tên file AI}`. Gán vào `source_document.svg_files`.
+4. **Mỗi SVG = 1 Part**, `preview_file` trỏ cùng file đó.
+5. Khởi tạo PartStep từ template.
+6. Bootstrap bước 1 (xem §6.3).
+7. Lỗi → `SourceDocument.status = FAILED`, raise ValidationError.
 
-Dependencies design service: `pymupdf`, `ezdxf`, `matplotlib`.
+Design service cần mount `/home/devserver/paihong/ai` và `AI_DOMAIN` trong `.env` để đọc file AI trả về.
 
 ### 6.3 Bootstrap step 1
 
@@ -460,8 +462,8 @@ Khi `POST .../steps/{step_code}/complete/`:
 1. Tạo **official revision mới** (kể cả step đã DONE — **complete lại được**).
 2. **Bỏ qua** kiểm tra `base_revision_id` conflict khi complete (`mark_step_done=True`).
 3. Gọi `clear_steps_after(part, after_sequence=step.sequence)`:
-  - Hard-delete **tất cả StepRevision** (và artifacts) của các PartStep có `step.sequence` **lớn hơn** bước vừa complete.
-  - Reset các PartStep đó: `NOT_STARTED`, xóa timestamps, `latest_revision`, `official_revision`.
+   - Hard-delete **tất cả StepRevision** (và artifacts) của các PartStep có `step.sequence` **lớn hơn** bước vừa complete.
+   - Reset các PartStep đó: `NOT_STARTED`, xóa timestamps, `latest_revision`, `official_revision`.
   - Xóa **DesignWorkspace** + blobs step 10 (nếu có).
 
 **Ví dụ:** đã làm bước 1→5, quay lại bước 2 và complete → xóa sạch revision bước 3, 4, 5.

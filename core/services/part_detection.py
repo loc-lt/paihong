@@ -5,76 +5,79 @@ from rest_framework.exceptions import ValidationError
 
 from core.constant import PartStatusEnum, SourceDocumentStatusEnum
 from core.models import Part
-from core.services.file_storage import read_file_object_bytes, store_bytes_content
+from core.services.ai_design import AiOutputFileError, fetch_ai_json, store_ai_output_file
+from core.services.file_storage import get_file_url
 from core.services.part_workflow import (
     bootstrap_completed_part_steps,
     ensure_work_item_template,
     initialize_part_steps,
 )
 from core.services.pick_upper_candidates import build_pick_upper_candidates
-from core.services.source_document_converter import FileToSvgConverter
 
 
-def detect_parts_from_source_document(source_document, user=None) -> list[dict]:
-    """
-    Convert a source document (PDF/AI/DXF) into one Part per SVG region.
-    """
+def _split_source_document_svgs(source_document, user=None) -> list:
+    """Call AI split_regions and store every list_svg file."""
     file_object = source_document.file
-    file_bytes = read_file_object_bytes(file_object)
-    filename = source_document.original_filename
-
-    try:
-        list_svg, list_texts, svg_full = FileToSvgConverter.process_file(
-            file_bytes, filename
+    url_path = get_file_url(file_object.storage_key, file_object.storage_backend)
+    if not url_path or not str(url_path).startswith(("http://", "https://")):
+        raise ValidationError(
+            {"file": "BE_DOMAIN is empty. Cannot send the source file URL to AI!"}
         )
-    except ValueError as exc:
+
+    body = fetch_ai_json(
+        "/api/v1/split_regions",
+        {
+            "url_path": url_path,
+            "product_code": source_document.work_item.item_code,
+        },
+    )
+    data = body.get("data") if isinstance(body.get("data"), dict) else {}
+    list_svg = data.get("list_svg") or []
+    if not isinstance(list_svg, list) or not list_svg:
+        raise ValidationError({"file": "AI split_regions returned no SVG files!"})
+
+    stored = []
+    for path in list_svg:
+        try:
+            stored.append(store_ai_output_file(str(path), created_by=user))
+        except AiOutputFileError as exc:
+            raise ValidationError({"file": str(exc)}) from exc
+    return stored
+
+
+def detect_parts_from_source_document(source_document, user=None) -> tuple[list, list[dict]]:
+    """
+    Split a source PDF through AI and build one Part per SVG in list_svg.
+    """
+    try:
+        svg_files = _split_source_document_svgs(source_document, user=user)
+    except AiOutputFileError as exc:
         raise ValidationError({"file": str(exc)}) from exc
 
-    if svg_full:
-        source_document.svg_file = store_bytes_content(
-            svg_full.encode("utf-8"),
-            filename=f"{os.path.splitext(filename)[0] or 'document'}.svg",
-            created_by=user,
-        )
-
-    if not list_svg:
-        raise ValidationError(
-            {"file": "No parts could be extracted from the source file!"}
-        )
-
+    filename = source_document.original_filename
     base_name = os.path.splitext(filename)[0] or "Part"
     extension = os.path.splitext(filename)[1].lower()
-    multi_part = len(list_svg) > 1
+    multi_part = len(svg_files) > 1
 
     parts_data = []
-    for index, svg_str in enumerate(list_svg, start=1):
-        preview_file = store_bytes_content(
-            svg_str.encode("utf-8"),
-            filename=f"{base_name}_part_{index}.svg",
-            created_by=user,
-        )
+    for index, svg_file in enumerate(svg_files, start=1):
         name = f"{base_name} - Part {index}" if multi_part else base_name
-        texts = (
-            list_texts[index - 1] if index - 1 < len(list_texts) else []
-        )
-        detected_metadata = {
-            "source": "file_converter",
-            "source_document_id": str(source_document.id),
-            "page_index": index,
-            "total_pages": len(list_svg),
-            "original_filename": filename,
-            "texts": texts,
-        }
         parts_data.append(
             {
                 "sequence": index,
                 "name": name,
-                "preview_file": preview_file,
+                "preview_file": svg_file,
                 "source_page": index if extension in (".pdf", ".ai") else None,
-                "detected_metadata": detected_metadata,
+                "detected_metadata": {
+                    "source": "split_regions",
+                    "source_document_id": str(source_document.id),
+                    "page_index": index,
+                    "total_pages": len(svg_files),
+                    "original_filename": filename,
+                },
             }
         )
-    return parts_data
+    return svg_files, parts_data
 
 
 @transaction.atomic
@@ -124,7 +127,7 @@ def process_source_document_with_ai(
     bootstrap_steps: bool = True,
 ) -> list[Part]:
     try:
-        parts_data = detect_parts_from_source_document(
+        svg_files, parts_data = detect_parts_from_source_document(
             source_document,
             user=user,
         )
@@ -136,10 +139,8 @@ def process_source_document_with_ai(
 
     source_document.status = SourceDocumentStatusEnum.PROCESSED.value
     source_document.updated_by = user
-    update_fields = ["status", "updated_by", "modified"]
-    if source_document.svg_file_id:
-        update_fields.append("svg_file")
-    source_document.save(update_fields=update_fields)
+    source_document.save(update_fields=["status", "updated_by", "modified"])
+    source_document.svg_files.set(svg_files)
     return create_parts_from_detection(
         source_document=source_document,
         parts_data=parts_data,

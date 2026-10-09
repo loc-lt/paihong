@@ -17,11 +17,11 @@ class SourceDocumentViewSet(viewsets.ViewSet):
     @extend_schema(**get_source_document_document)
     def retrieve(self, request, pk=None):
         source_document = get_instance(SourceDocument, pk)
-        source_document = SourceDocument.objects.select_related(
-            "file",
-            "svg_file",
-            "work_item",
-        ).get(pk=source_document.pk)
+        source_document = (
+            SourceDocument.objects.select_related("file", "work_item")
+            .prefetch_related("svg_files")
+            .get(pk=source_document.pk)
+        )
         return success_response(
             SourceDocumentSerializer(source_document).data,
             "Source document retrieved successfully!",

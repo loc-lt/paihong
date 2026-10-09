@@ -189,11 +189,9 @@ class SourceDocument(TimeStampedModel):
         null=False,
         blank=False,
     )
-    svg_file = models.ForeignKey(
+    svg_files = models.ManyToManyField(
         FileObject,
         related_name="source_document_svgs",
-        on_delete=models.SET_NULL,
-        null=True,
         blank=True,
     )
     sequence = models.PositiveIntegerField(null=False, blank=False)
