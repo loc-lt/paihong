@@ -425,14 +425,7 @@ def _with_optional_gauges(payload: dict, data: dict) -> dict:
 
 
 def recall_smart_s(data: dict):
-    payload = _with_optional_gauges(
-        {
-            "product_code": data["product_code"],
-            "url_svg": revision_png_url(data["svg_id"], field_name="svg_id"),
-        },
-        data,
-    )
-    return recall_ai("/api/v1/smart_s", payload)
+    return recall_ai_passthrough("/api/v1/smart_s", data)
 
 
 def recall_merge_images(data: dict):
@@ -553,17 +546,15 @@ def recall_shift_odd_rows(data: dict):
 
 
 def recall_create_kmo(data: dict):
-    payload = _copy_present(
-        data,
-        (
-            "name_machine",
-            "gauge",
-            "width",
-            "rt",
-            "product_code",
-            "course_per_pixel",
-            "kmo_has_valve_chain",
-        ),
+    payload = {
+        key: value
+        for key, value in data.items()
+        if key not in ("file_jc_id", "file_f_id")
+    }
+    payload["url_file_jc"] = revision_png_url(
+        data["file_jc_id"], field_name="file_jc_id"
     )
-    payload["url_image"] = revision_png_url(data["image_id"], field_name="image_id")
+    payload["url_file_f"] = revision_png_url(
+        data["file_f_id"], field_name="file_f_id"
+    )
     return recall_ai("/api/v1/create_kmo", payload)

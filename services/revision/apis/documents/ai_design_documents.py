@@ -63,9 +63,10 @@ smart_s_document = {
     "tags": ["ai_design_files"],
     "summary": "Smart S",
     "description": (
-        "Recall `AI_DOMAIN/api/v1/smart_s`. FE sends `svg_id`. The backend sends "
-        "`url_svg` as the public PNG URL. "
-        + _ID_TO_PNG
+        "Recall `AI_DOMAIN/api/v1/smart_s`. FE sends the AI body unchanged: "
+        "`product_code`, `url_svg` (image URL, not a revision id), and optional "
+        "`wales_per_inch`, `courses_per_cm`, `courses_per_pixel`. The backend "
+        "forwards that body as-is."
     ),
     "request": SmartSRequestSerializer,
     "responses": _AI_RESPONSES,
@@ -230,9 +231,13 @@ create_kmo_document = {
     "tags": ["ai_design_files"],
     "summary": "Create KMO",
     "description": (
-        "Recall `AI_DOMAIN/api/v1/create_kmo`. FE sends `image_id`. The backend sends "
-        "`url_image`. `name_machine`, `gauge`, `width`, `rt`, `product_code`, "
-        "`course_per_pixel`, and `kmo_has_valve_chain` are optional. "
+        "Recall `AI_DOMAIN/api/v1/create_kmo`. FE sends `file_jc_id` and `file_f_id` "
+        "(START_DESIGNING design-file revision ids). The backend sends `url_file_jc` "
+        "and `url_file_f`. Also sends `product_code`, `barrenzahl`, `barrentyp`, "
+        "`zul_max_kg`, `max_versatzsprung`, `max_ueberlegungssprung`, and `kg_pattern`. "
+        "Each of those lists has `barrenzahl` items. `kg_pattern` is a list of rows of "
+        "`[int, int]` pairs. `name_machine`, `gauge`, `width`, `rt`, `course_per_pixel`, "
+        "and `kmo_has_valve_chain` are optional. "
         + _ID_TO_PNG
     ),
     "request": CreateKmoRequestSerializer,
