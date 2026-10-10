@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-DESIGN_FILE_SEQUENCE = ("S", "S1", "C", "H", "P", "F", "FC", "KMO")
+DESIGN_FILE_SEQUENCE = ("S", "S1", "C", "H", "P", "FC", "F")
 
 # File types that use grid snapshot + PATCH/GET tiles API.
 GRID_DESIGN_FILE_TYPES = frozenset(DESIGN_FILE_SEQUENCE)
@@ -13,9 +13,8 @@ DESIGN_FILE_SPECS: dict[str, dict[str, str | bool]] = {
     "C": {"filename_template": "{product_code}_C.png", "grid": True},
     "H": {"filename_template": "{product_code}_H.png", "grid": True},
     "P": {"filename_template": "{product_code}_P.png", "grid": True},
-    "F": {"filename_template": "{product_code}_F.png", "grid": True},
     "FC": {"filename_template": "{product_code}_FC.png", "grid": True},
-    "KMO": {"filename_template": "{product_code}.kmo", "grid": True},
+    "F": {"filename_template": "{product_code}_F.png", "grid": True},
 }
 
 

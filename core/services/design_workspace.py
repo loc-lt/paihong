@@ -211,7 +211,8 @@ def _create_empty_next_file_revision(
 
 
 def _ensure_design_files(workspace: DesignWorkspace, user=None) -> None:
-    existing = set(workspace.files.values_list("file_type", flat=True))
+    files = list(workspace.files.all())
+    existing = {design_file.file_type for design_file in files}
     for file_type in DESIGN_FILE_SEQUENCE:
         if file_type in existing:
             continue
@@ -220,6 +221,35 @@ def _ensure_design_files(workspace: DesignWorkspace, user=None) -> None:
             file_type=file_type,
             updated_by=user,
         )
+    stale = [
+        design_file
+        for design_file in files
+        if not design_file.is_draft and design_file.file_type not in DESIGN_FILE_SEQUENCE
+    ]
+    for design_file in stale:
+        revisions = list(design_file.revisions.all())
+        file_object_ids = _collect_revision_file_object_ids(revisions)
+        DesignFile.objects.filter(pk=design_file.pk).update(
+            latest_revision=None,
+            official_revision=None,
+        )
+        design_file.revisions.all().delete()
+        design_file.delete()
+        _delete_file_objects(file_object_ids)
+    settings = dict(workspace.settings or {})
+    progress = {
+        file_type: (settings.get("progress") or {}).get(file_type, "not_started")
+        for file_type in DESIGN_FILE_SEQUENCE
+    }
+    active = settings.get("active_file_type")
+    if active not in DESIGN_FILE_SEQUENCE:
+        active = "S"
+    if progress != (settings.get("progress") or {}) or active != settings.get("active_file_type"):
+        settings["progress"] = progress
+        settings["active_file_type"] = active
+        workspace.settings = settings
+        workspace.updated_by = user
+        workspace.save(update_fields=["settings", "updated_by", "modified"])
 
 
 def _latest_design_file_revision(design_file: DesignFile):
@@ -531,12 +561,12 @@ def complete_design_file_revision(
 
 @transaction.atomic
 def reopen_design_file(*, design_file: DesignFile, user=None) -> DesignWorkspace:
-    """Clear official status from this main file through KMO so it can be edited again."""
+    """Clear official status from this main file through F so it can be edited again."""
     from rest_framework.exceptions import ValidationError
 
     if design_file.is_draft or design_file.file_type not in DESIGN_FILE_SEQUENCE:
         raise ValidationError(
-            {"file_type": "Only main files S-KMO can be reopened!"}
+            {"file_type": "Only main files S through F can be reopened!"}
         )
     workspace = design_file.workspace
     progress = dict((workspace.settings or {}).get("progress") or {})

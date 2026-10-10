@@ -502,6 +502,22 @@ def recall_create_train_db_anchor(data: dict):
     return recall_ai_passthrough("/api/v1/create_train_db_anchor", data)
 
 
+def recall_edge_binding(data: dict):
+    colors = {
+        name: {"rgb": list(item["rgb"])}
+        for name, item in data["colors"].items()
+    }
+    return recall_ai(
+        "/api/v1/edge_binding",
+        {
+            "url_file": revision_png_url(data["file_id"], field_name="file_id"),
+            "code_product": data["code_product"],
+            "colors": colors,
+            "type": data["type"],
+        },
+    )
+
+
 def recall_create_file_fc(data: dict):
     payload = {
         "product_code": data["product_code"],

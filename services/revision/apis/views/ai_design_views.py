@@ -19,6 +19,7 @@ from core.serializers.ai_design_serializers import (
     CreateKmoRequestSerializer,
     CreateTrainDbAnchorRequestSerializer,
     CreateTrainDbRequestSerializer,
+    EdgeBindingRequestSerializer,
     MergeImagesRequestSerializer,
     ShiftOddRowsRequestSerializer,
     SmartSRequestSerializer,
@@ -33,6 +34,7 @@ from core.services.ai_design import (
     recall_create_kmo,
     recall_create_train_db,
     recall_create_train_db_anchor,
+    recall_edge_binding,
     recall_delete_anchors,
     recall_delete_paths,
     recall_merge_images,
@@ -53,6 +55,7 @@ from ..documents.ai_design_documents import (
     create_kmo_document,
     create_train_db_anchor_document,
     create_train_db_document,
+    edge_binding_document,
     delete_anchors_document,
     delete_paths_document,
     merge_images_document,
@@ -179,3 +182,8 @@ class AiDesignViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="create_kmo")
     def create_kmo(self, request):
         return self._recall(request, CreateKmoRequestSerializer, recall_create_kmo)
+
+    @extend_schema(**edge_binding_document)
+    @action(detail=False, methods=["post"], url_path="edge_binding")
+    def edge_binding(self, request):
+        return self._recall(request, EdgeBindingRequestSerializer, recall_edge_binding)

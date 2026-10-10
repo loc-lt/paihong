@@ -12,6 +12,7 @@ from core.serializers.ai_design_serializers import (
     CreateKmoRequestSerializer,
     CreateTrainDbAnchorRequestSerializer,
     CreateTrainDbRequestSerializer,
+    EdgeBindingRequestSerializer,
     MergeImagesRequestSerializer,
     ShiftOddRowsRequestSerializer,
     SmartSRequestSerializer,
@@ -245,5 +246,19 @@ create_kmo_document = {
         + _ID_TO_PNG
     ),
     "request": CreateKmoRequestSerializer,
+    "responses": _AI_RESPONSES,
+}
+
+edge_binding_document = {
+    "tags": ["ai_design_files"],
+    "summary": "Edge binding",
+    "description": (
+        "Recall `AI_DOMAIN/api/v1/edge_binding`. FE sends `file_id` (a START_DESIGNING "
+        "design-file revision id), `code_product`, `colors` (`BG`, `CD`, `T`, each "
+        "with `rgb` of 3 integers), and `type`. The backend sends `url_file` instead "
+        "of `file_id`. "
+        + _ID_TO_PNG
+    ),
+    "request": EdgeBindingRequestSerializer,
     "responses": _AI_RESPONSES,
 }

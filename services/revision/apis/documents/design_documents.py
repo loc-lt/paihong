@@ -42,7 +42,7 @@ create_draft_design_file_document = {
 reopen_design_file_document = {
     "summary": "Reopen a completed main design file for editing.",
     "description": (
-        "For a completed file in S–KMO (for example S1). Sets progress of that file and "
+        "For a completed file in S–F (for example S1). Sets progress of that file and "
         "every later file that is already complete back to `in_progress`, clears "
         "`official_revision` on those files, and sets `active_file_type` to the reopened "
         "file. If START_DESIGNING was done, the step returns to in progress. Draft files "
@@ -56,7 +56,7 @@ rename_draft_design_file_document = {
     "summary": "Rename a draft file.",
     "description": (
         "JSON body requires `name`. Only draft files (`D1`, `D2`, …) can be renamed. "
-        "Main files S–KMO keep their generated display name."
+        "Main files S–F keep their generated display name."
     ),
     "parameters": [UUID_PATH_PARAM],
     "request": RenameDraftDesignFileSerializer,
@@ -66,7 +66,7 @@ rename_draft_design_file_document = {
 delete_draft_design_file_document = {
     "summary": "Delete a draft file.",
     "description": (
-        "Deletes the draft and all of its revisions. Main files S–KMO cannot be deleted. "
+        "Deletes the draft and all of its revisions. Main files S–F cannot be deleted. "
         "Path `file_type` is the draft code (`D1`, `D2`, …)."
     ),
     "parameters": [UUID_PATH_PARAM],
@@ -98,13 +98,13 @@ design_file_save_document = {
 design_file_complete_document = {
     "summary": "Complete design file and mark progress.",
     "description": (
-        "Marks the latest revision official. For main files S–KMO, updates workspace "
+        "Marks the latest revision official. For main files S–F, updates workspace "
         "progress and requires prior files to be done (e.g. complete S1 before C). "
         "Completing a main file also creates an empty-tile revision on the next file in "
-        "S → S1 → C → H → P → F → FC → KMO at the same grid size, and sets that next "
+        "S → S1 → C → H → P → FC → F at the same grid size, and sets that next "
         "file to `in_progress` when it was `not_started`. If the next file already has "
         "a revision, that empty revision is not created. "
-        "KMO has no next file. Draft files (`D1`, `D2`, …) skip that order check, do "
+        "F has no next file. Completing F marks START_DESIGNING done. Draft files (`D1`, `D2`, …) skip that order check, do "
         "not change main-file progress, and do not create a following revision. "
         "Does not merge tiles or read `tile_manifest`."
     ),

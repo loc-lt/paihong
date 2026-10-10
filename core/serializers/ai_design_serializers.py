@@ -392,3 +392,43 @@ class CreateKmoRequestSerializer(serializers.Serializer):
                     {key: f"{key} must contain {count} items!"}
                 )
         return attrs
+
+
+class EdgeBindingColorSerializer(serializers.Serializer):
+    rgb = serializers.ListField(
+        min_length=3,
+        max_length=3,
+        child=serializers.IntegerField(
+            min_value=0,
+            max_value=255,
+            error_messages={
+                "invalid": "Each RGB value must be an integer!",
+                "min_value": "Each RGB value must be at least 0!",
+                "max_value": "Each RGB value must be at most 255!",
+                "null": "Each RGB value must be an integer!",
+            },
+        ),
+        error_messages={
+            "required": "RGB is required!",
+            "null": "RGB is required!",
+            "not_a_list": "RGB must be a list of 3 integers!",
+            "invalid": "RGB must be a list of 3 integers!",
+            "empty": "RGB must be a list of 3 integers!",
+            "min_length": "RGB must contain 3 integers!",
+            "max_length": "RGB must contain 3 integers!",
+        },
+    )
+
+
+class EdgeBindingColorsSerializer(serializers.Serializer):
+    BG = EdgeBindingColorSerializer()
+    CD = EdgeBindingColorSerializer()
+    T = EdgeBindingColorSerializer()
+
+
+class EdgeBindingRequestSerializer(serializers.Serializer):
+    file_id = _required_revision_id("File revision id")
+    code_product = _required_text("Product code", max_length=255)
+    colors = EdgeBindingColorsSerializer()
+    type = _required_text("Type", max_length=255)
+
