@@ -7,6 +7,7 @@ from core.serializers.revision_serializers import (
     RestoreRevisionSerializer,
     SaveStepRevisionSerializer,
     StepRevisionDetailSerializer,
+    PartHistorySerializer,
 )
 
 _SAVE_REVISION_DESCRIPTION = (
@@ -16,6 +17,32 @@ _SAVE_REVISION_DESCRIPTION = (
     "- **base_revision_id** (optional): latest revision ID for conflict detection\n"
     "- **note** (optional): save note"
 )
+
+get_part_history_document = {
+    "summary": "Workflow branches of a part.",
+    "description": (
+        "Each branch lists every workflow step, earliest first. "
+        "A step on the branch has status done (3), its revision, `settings`, and "
+        "`file_urls` when that revision has images. A step the branch has not "
+        "reached has status not started (1), `id` null, empty `settings`, and an "
+        "empty `file_urls`. "
+        "Those nodes stay the same when another branch is checked out. "
+        "`current_branch_id` is the branch the next complete continues. "
+        "Re-completing a step already on that branch forks a new branch. "
+        "Completing the next not-started step extends the same branch."
+    ),
+    "responses": {200: PartHistorySerializer},
+}
+
+checkout_part_branch_document = {
+    "summary": "Check out a workflow branch.",
+    "description": (
+        "Sets `current_branch_id`. Returns the same history payload: every branch "
+        "keeps its steps, status, settings, and `file_urls`. No revision is created. "
+        "The next complete continues from this branch."
+    ),
+    "responses": {200: PartHistorySerializer},
+}
 
 get_part_steps_document = {
     "summary": "List part steps.",
@@ -57,8 +84,8 @@ official_save_revision_document = {
     "description": (
         _SAVE_REVISION_DESCRIPTION
         + "\n\nA step can be completed again even if already done. "
-        "Each complete creates a new official revision and hard-deletes all "
-        "revisions for later steps (e.g. re-complete step 2 clears steps 3, 4, 5)."
+        "Each complete creates a new official revision. Later steps go back to "
+        "not started. Their revisions and the design workspace are kept."
     ),
     "request": SaveStepRevisionSerializer,
     "responses": {201: StepRevisionDetailSerializer},

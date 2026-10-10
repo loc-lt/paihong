@@ -291,25 +291,29 @@ def initialize_design_workspace(
     user=None,
 ) -> DesignWorkspace:
     workspace = get_or_create_workspace(part_step, user=user)
-    _clear_design_workspace_revisions(
-        workspace,
-        keep_file_object_ids={snapshot_file.id},
-    )
-    s_file = workspace.files.get(file_type="S")
-    _create_s_grid_revision(
-        s_file=s_file,
-        width=grid_width,
-        height=grid_height,
-        snapshot_file=snapshot_file,
-        user=user,
-    )
-
-    workspace.settings = {
-        "active_file_type": "S",
-        "grid": {"width": grid_width, "height": grid_height},
-        "progress": {file_type: "not_started" for file_type in DESIGN_FILE_SEQUENCE},
-    }
-    workspace.settings["progress"]["S"] = "in_progress"
+    has_revisions = DesignFileRevision.objects.filter(
+        design_file__workspace=workspace
+    ).exists()
+    settings = dict(workspace.settings or {})
+    if not has_revisions:
+        s_file = workspace.files.get(file_type="S")
+        _create_s_grid_revision(
+            s_file=s_file,
+            width=grid_width,
+            height=grid_height,
+            snapshot_file=snapshot_file,
+            user=user,
+        )
+        progress = {file_type: "not_started" for file_type in DESIGN_FILE_SEQUENCE}
+        progress["S"] = "in_progress"
+        settings = {
+            "active_file_type": "S",
+            "grid": {"width": grid_width, "height": grid_height},
+            "progress": progress,
+        }
+    else:
+        settings["grid"] = {"width": grid_width, "height": grid_height}
+    workspace.settings = settings
     workspace.updated_by = user
     workspace.save(update_fields=["settings", "updated_by", "modified"])
     return workspace
@@ -355,6 +359,9 @@ def create_design_file_revision(
                 )
             }
         )
+
+    if parent_revision is None and latest:
+        parent_revision = latest
 
     revision = DesignFileRevision.objects.create(
         design_file=design_file,

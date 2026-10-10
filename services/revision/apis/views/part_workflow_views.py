@@ -18,12 +18,15 @@ from core.serializers.revision_serializers import (
     RestoreRevisionSerializer,
     SaveStepRevisionSerializer,
     StepRevisionDetailSerializer,
+    PartHistorySerializer,
 )
 from core.services.part_workflow import sync_part_steps
 from core.utils import get_instance, global_response_errors
 
 from ..documents.revision_documents import (
     autosave_revision_document,
+    checkout_part_branch_document,
+    get_part_history_document,
     get_part_step_document,
     get_part_steps_document,
     get_revision_document,
@@ -37,6 +40,40 @@ from ..documents.revision_documents import (
 
 class PartWorkflowViewSet(viewsets.ViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    @extend_schema(**get_part_history_document)
+    @action(detail=True, methods=["get"], url_path="history")
+    def history(self, request, pk=None):
+        from core.services.part_branch import list_part_branches
+
+        part = get_instance(Part, pk)
+        return success_response(
+            PartHistorySerializer(list_part_branches(part)).data,
+            "Part history retrieved successfully.",
+        )
+
+    @extend_schema(**checkout_part_branch_document)
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"branches/(?P<branch_id>[^/.]+)/checkout",
+    )
+    def checkout_branch(self, request, pk=None, branch_id=None):
+        from core.models import PartBranch
+        from core.services.part_branch import checkout_branch as checkout_part_branch
+        from core.services.part_branch import list_part_branches
+
+        require_design(request.user)
+        part = get_instance(Part, pk)
+        branch = PartBranch.objects.filter(pk=branch_id, part=part).first()
+        if branch is None:
+            raise NotFound("Branch not found!")
+        checkout_part_branch(part, branch, user=request.user)
+        part.refresh_from_db()
+        return success_response(
+            PartHistorySerializer(list_part_branches(part)).data,
+            "Branch checked out successfully!",
+        )
 
     @extend_schema(**get_part_steps_document)
     @action(detail=True, methods=["get"], url_path="steps")
@@ -57,6 +94,7 @@ class PartWorkflowViewSet(viewsets.ViewSet):
         steps = list(queryset)
         serializer = PartStepsListSerializer(
             {
+                "current_branch_id": part.current_branch_id,
                 "steps": steps,
                 "total_steps": len(steps),
                 "completed_steps": sum(
@@ -192,6 +230,7 @@ class PartWorkflowViewSet(viewsets.ViewSet):
                 StepRevision.objects.prefetch_related("artifacts__file")
                 .get(pk=result.revision.pk)
             )
+            part.refresh_from_db(fields=["current_branch"])
             response_data = StepRevisionDetailSerializer(revision).data
             if mark_step_done:
                 next_settings = result.next_step_settings
@@ -201,19 +240,18 @@ class PartWorkflowViewSet(viewsets.ViewSet):
                     settings_payload, settings_meta = unwrap_settings(
                         next_settings.get("settings")
                     )
-                    response_data = {
-                        "revision": response_data,
-                        "next_step_settings": {
-                            "step_code": next_settings.get("step_code"),
-                            "settings": settings_payload,
-                            "meta": settings_meta,
-                        },
+                    next_payload = {
+                        "step_code": next_settings.get("step_code"),
+                        "settings": settings_payload,
+                        "meta": settings_meta,
                     }
                 else:
-                    response_data = {
-                        "revision": response_data,
-                        "next_step_settings": None,
-                    }
+                    next_payload = None
+                response_data = {
+                    "branch_id": part.current_branch_id,
+                    "revision": response_data,
+                    "next_step_settings": next_payload,
+                }
             return success_response(
                 response_data,
                 message,

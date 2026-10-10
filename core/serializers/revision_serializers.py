@@ -16,6 +16,30 @@ from core.services.file_storage import get_file_url
 from core.services.step_settings import unwrap_settings
 
 
+class PartBranchStepSerializer(serializers.Serializer):
+    id = serializers.UUIDField(allow_null=True)
+    step_code = serializers.CharField()
+    step_sequence = serializers.IntegerField()
+    status = serializers.IntegerField()
+    revision_no = serializers.IntegerField(allow_null=True)
+    revision_type = serializers.IntegerField(allow_null=True)
+    note = serializers.CharField(allow_blank=True)
+    settings = serializers.DictField()
+    file_urls = serializers.ListField(child=serializers.CharField())
+    created = serializers.DateTimeField(allow_null=True)
+
+
+class PartBranchSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    number = serializers.IntegerField()
+    steps = PartBranchStepSerializer(many=True)
+
+
+class PartHistorySerializer(serializers.Serializer):
+    current_branch_id = serializers.UUIDField(allow_null=True)
+    branches = PartBranchSerializer(many=True)
+
+
 class StepRevisionSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = StepRevision
@@ -78,6 +102,7 @@ class StepRevisionDetailSerializer(serializers.ModelSerializer):
             "revision_no",
             "revision_type",
             "parent_revision",
+            "based_on_revision",
             "settings",
             "settings_meta",
             "settings_schema_version",
@@ -137,6 +162,7 @@ class PartStepWithRevisionFilesSerializer(PartStepSerializer):
 
 
 class PartStepsListSerializer(serializers.Serializer):
+    current_branch_id = serializers.UUIDField(allow_null=True)
     steps = PartStepWithRevisionFilesSerializer(many=True, read_only=True)
     total_steps = serializers.IntegerField(read_only=True)
     completed_steps = serializers.IntegerField(read_only=True)

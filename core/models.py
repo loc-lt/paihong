@@ -287,6 +287,13 @@ class Part(TimeStampedModel):
         related_name="updated_parts",
         on_delete=models.SET_NULL,
     )
+    current_branch = models.ForeignKey(
+        "PartBranch",
+        null=True,
+        blank=True,
+        related_name="+",
+        on_delete=models.SET_NULL,
+    )
 
     class Meta:
         db_table = "part"
@@ -484,6 +491,13 @@ class StepRevision(TimeStampedModel):
         related_name="child_revisions",
         on_delete=models.SET_NULL,
     )
+    based_on_revision = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        related_name="based_revisions",
+        on_delete=models.SET_NULL,
+    )
     settings = models.JSONField(default=dict, null=False, blank=True)
     settings_schema_version = models.PositiveIntegerField(
         default=1, null=False, blank=False
@@ -523,6 +537,42 @@ class StepRevision(TimeStampedModel):
 
     def __str__(self):
         return f"{self.part_step} - Revision {self.revision_no}"
+
+
+class PartBranch(TimeStampedModel):
+    """One workflow path. Steps are the based_on chain ending at head_revision."""
+
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, null=False, blank=False
+    )
+    part = models.ForeignKey(
+        Part,
+        related_name="branches",
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+    )
+    number = models.PositiveIntegerField(null=False, blank=False)
+    head_revision = models.ForeignKey(
+        StepRevision,
+        null=False,
+        blank=False,
+        related_name="headed_branches",
+        on_delete=models.PROTECT,
+    )
+
+    class Meta:
+        db_table = "part_branch"
+        ordering = ["number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["part", "number"],
+                name="uq_part_branch_number",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.part} - Branch {self.number}"
 
 
 class RevisionArtifact(TimeStampedModel):

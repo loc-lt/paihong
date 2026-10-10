@@ -100,11 +100,20 @@ def create_step_revision(
             )
         return part_step.latest_revision
 
+    if parent_revision is None and part_step.latest_revision_id:
+        parent_revision = part_step.latest_revision
+
+    from core.services.part_history import upstream_official_revision
+
     revision = StepRevision.objects.create(
         part_step=part_step,
         revision_no=_next_revision_no(part_step),
         revision_type=revision_type,
         parent_revision=parent_revision,
+        based_on_revision=upstream_official_revision(
+            part_step.part,
+            part_step.step.sequence,
+        ),
         settings=validated_settings,
         settings_schema_version=settings_schema_version,
         app_version=app_version,
@@ -160,8 +169,7 @@ def create_step_revision(
     if mark_step_done:
         from core.services.part_revert import clear_steps_after
 
-        # Clear downstream steps before handlers that initialize later work
-        # (e.g. BUILD_GRID -> DesignWorkspace for START_DESIGNING).
+        # Later steps return to not started. Their revisions stay on disk.
         clear_steps_after(
             part=part_step.part,
             after_sequence=part_step.step.sequence,
@@ -172,6 +180,9 @@ def create_step_revision(
             revision=revision,
             user=user,
         )
+        from core.services.part_branch import attach_official_revision
+
+        attach_official_revision(part_step.part, revision, user)
         return StepRevisionResult(
             revision=revision,
             next_step_settings=next_step_settings,

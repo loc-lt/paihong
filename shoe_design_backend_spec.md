@@ -46,7 +46,7 @@ Code dùng chung: `paihong_apis/app/`, `paihong_apis/core/`. Mỗi service mount
 | Pattern                                                                         | Upstream         |
 | ------------------------------------------------------------------------------- | ---------------- |
 | `/api/v1/(auth|users)`                                                          | user_service     |
-| `/api/v1/parts/{id}/steps/...`, `/sync-steps`                                   | revision_service |
+| `/api/v1/parts/{id}/steps/...`, `/sync-steps`, `/history`, `/branches`         | revision_service |
 | `/api/v1/revisions/...`                                                         | revision_service |
 | `/api/v1/(work-items|source-documents|workflow-templates|workflow-steps|parts)` | design_service   |
 | `/media/`, `/static/`                                                           | shared volumes   |
@@ -147,7 +147,7 @@ Tất cả enum lưu **integer** trong DB/API (không phải string).
 | 10  | START_DESIGNING      | Start designing        |
 
 
-Seed: `python manage.py seed_workflow_steps` → template mặc định `STANDARD_SHOE`.
+Seed: `python manage.py seed_workflow_steps` → template mặc định `STANDARD_SHOE`. Cây git demo: `python manage.py seed_part_git_history` → work item `GIT_DEMO`.
 
 ---
 
@@ -268,7 +268,8 @@ Property: `work_item` → `source_document.work_item`.
 | ----------------------------------------------------------------- | -------------------------- |
 | `part_step`, `revision_no`                                        | unique together, monotonic |
 | `revision_type`                                                   | RevisionTypeEnum           |
-| `parent_revision`                                                 | self-FK (restore chain)    |
+| `parent_revision`                                                 | self-FK, revision trước trong **cùng step** |
+| `based_on_revision`                                               | self-FK, official revision của step liền trước tại lúc tạo |
 | `settings`                                                        | JSON                       |
 | `settings_schema_version`, `app_version`, `settings_hash`, `note` |                            |
 
@@ -410,7 +411,7 @@ Service trung tâm: `create_step_revision()` (`core/services/step_revision.py`).
 | -------------------- | ------------- | ---------------------------------------------------------------------------------------------- |
 | `POST .../autosave/` | 1 Autosave    | Dedup nếu settings hash giống + không file mới; giữ 12 autosave gần nhất                       |
 | `POST .../save/`     | 2 Manual      | Tạo revision mới                                                                               |
-| `POST .../complete/` | 3 Official    | Set `official_revision`, mark step **DONE**, gọi `clear_steps_after`, trả `next_step_settings` |
+| `POST .../complete/` | 3 Official    | Set `official_revision`, mark step **DONE**, các step sau về `NOT_STARTED` (không xóa revision), trả `next_step_settings` |
 
 
 **Settings wrapper** — mọi revision lưu dạng `{ data, meta }` trong DB; API GET trả `settings` (unwrap `data`) + `settings_meta` riêng.
@@ -454,7 +455,7 @@ Service trung tâm: `create_step_revision()` (`core/services/step_revision.py`).
 
 
 
-### 6.5 Complete step — re-complete & xóa step sau
+### 6.5 Complete step — quay lại bước trước
 
 **Không có API revert riêng.** Logic gộp vào **complete**:
 
@@ -462,14 +463,18 @@ Khi `POST .../steps/{step_code}/complete/`:
 
 1. Tạo **official revision mới** (kể cả step đã DONE — **complete lại được**).
 2. **Bỏ qua** kiểm tra `base_revision_id` conflict khi complete (`mark_step_done=True`).
-3. Gọi `clear_steps_after(part, after_sequence=step.sequence)`:
-   - Hard-delete **tất cả StepRevision** (và artifacts) của các PartStep có `step.sequence` **lớn hơn** bước vừa complete.
-   - Reset các PartStep đó: `NOT_STARTED`, xóa timestamps, `latest_revision`, `official_revision`.
-  - Xóa **DesignWorkspace** + blobs step 10 (nếu có).
+3. `clear_steps_after`: mọi PartStep có `sequence` lớn hơn chỉ đổi `status = NOT_STARTED` và xóa `started_at` / `completed_at`. **Không xóa** StepRevision, artifact, DesignWorkspace, hay design file revision. `latest_revision` và `official_revision` của các step đó vẫn giữ.
 
-**Ví dụ:** đã làm bước 1→5, quay lại bước 2 và complete → xóa sạch revision bước 3, 4, 5.
+**Ví dụ:** đã làm tới START_DESIGNING, complete lại BUILD_GRID → START_DESIGNING về chưa bắt đầu, toàn bộ revision và file thiết kế vẫn còn.
 
-Implementation: `core/services/part_revert.py` → `clear_steps_after()`.
+Complete lại BUILD_GRID khi workspace đã có revision **không** tạo grid S trống mới và **không** xóa file đã vẽ. Lần complete BUILD_GRID đầu tiên vẫn tạo revision 1 của file S.
+
+Lịch sử cả part: `GET /api/v1/parts/{id}/history` trả các nhánh. Mỗi nhánh liệt kê đủ step của quy trình, từ step đầu. Step đã có trên nhánh: `status = 3` (done), revision, `settings` của revision đó, `file_urls` nếu revision có ảnh. Step chưa tới: `status = 1` (not started), `id` null, `settings` rỗng, `file_urls` rỗng. Checkout không đổi các node này, chỉ đổi `current_branch_id`. FE xem một nhánh bằng cách lấy đúng phần tử trong `branches`, không gọi API riêng. Complete một step đã có trên nhánh hiện tại thì tách nhánh mới. Complete step kế tiếp thì nối dài cùng nhánh.
+
+- `parent_revision`: revision trước trong cùng step (cạnh dọc).
+- `based_on_revision`: official revision của step gần nhất phía trước, ghi tại lúc tạo (cạnh ngang). Revision cũ vẫn trỏ official cũ; revision tạo sau khi complete lại trỏ official mới.
+
+Seed demo đủ 10 step (`RECEIVE_FILES` → `START_DESIGNING`): `python manage.py seed_part_git_history` (work item `GIT_DEMO`, khoảng 50 official revision). Mỗi lần complete lại một đoạn giữa quy trình tạo revision mới: `parent_revision` cùng step, `based_on_revision` là official step liền trước lúc đó. Lần cuối dừng ở `BUILD_GRID`, nên `START_DESIGNING` về chưa bắt đầu nhưng revision cũ vẫn còn. History trả đủ danh sách, không phân trang.
 
 ### 6.6 Restore revision
 
@@ -568,13 +573,15 @@ FE: chọn name → các gauge là `needles_per_inch` phân biệt trong spec c�
 
 | Method | Path                                                               | Auth  | Mô tả                                                                                        |
 | ------ | ------------------------------------------------------------------ | ----- | -------------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/parts/{id}/history`                                       | User  | Các nhánh, đủ step, `status`, `file_urls`. `current_branch_id` là nhánh đang làm |
+| POST   | `/api/v1/parts/{id}/branches/{branch_id}/checkout`                 | Staff | Chỉ đổi `current_branch_id`. Node các nhánh giữ nguyên. Không tạo revision |
 | GET    | `/api/v1/parts/{id}/steps/`                                        | User  | List PartStep theo sequence                                                                  |
 | POST   | `/api/v1/parts/{id}/sync-steps/`                                   | Staff | Sync từ template                                                                             |
 | GET    | `/api/v1/parts/{id}/steps/{step_code}/`                            | User  | Detail + latest/official revision + artifacts                                                |
 | GET    | `/api/v1/parts/{id}/steps/{step_code}/revisions/`                  | User  | Paginated; filter `revision_type`                                                            |
 | POST   | `/api/v1/parts/{id}/steps/{step_code}/autosave/`                   | Staff |                                                                                              |
 | POST   | `/api/v1/parts/{id}/steps/{step_code}/save/`                       | Staff |                                                                                              |
-| POST   | `/api/v1/parts/{id}/steps/{step_code}/complete/`                   | Staff | Official + clear steps after                                                                 |
+| POST   | `/api/v1/parts/{id}/steps/{step_code}/complete/`                   | Staff | Official. Step sau về not started, không xóa revision                                        |
 | GET    | `/api/v1/revisions/{id}/`                                          | User  |                                                                                              |
 | POST   | `/api/v1/revisions/{id}/restore/`                                  | Staff |                                                                                              |
 | GET    | `/api/v1/parts/{id}/steps/START_DESIGNING/workspace`              | User  | Workspace + 8 file chính rồi đến file nháp. Mỗi revision có `snapshot_file` (gzip) |
@@ -591,7 +598,7 @@ FE: chọn name → các gauge là `needles_per_inch` phân biệt trong spec c�
 | GET    | `/api/v1/design_file_revisions/{id}/tiles/?x0&y0&x1&y1`            | User  | Viewport tile load (**S và file nháp**)                                                      |
 | PATCH  | `/api/v1/design_file_revisions/{id}/tiles/`                        | Staff | Batch tile upload (**S và file nháp**). Lưu nguyên `data` (base64 gzip hoặc base64 JSON), không giải nén, không ghi `tile_manifest`, không vẽ preview. GET trả lại đúng chuỗi đó. Optional `grid_width` + `grid_height` để đổi kích thước |
 | POST   | `/api/v1/design_file_revisions/{id}/restore/`                      | Staff | Restore design file revision                                                                 |
-| POST   | `/api/v1/ai/smart_s`                                               | Staff | FE gửi `svg_id`. BE render PNG URL (`BE_DOMAIN/media/...`) rồi gọi `AI_DOMAIN/api/v1/smart_s` với `url_svg` |
+| POST   | `/api/v1/ai/smart_s`                                               | Staff | FE gửi nguyên body AI: `product_code`, `url_svg` (URL ảnh, không phải revision id), tùy chọn `wales_per_inch`, `courses_per_cm`, `courses_per_pixel`. BE forward nguyên. Ảnh trong response được copy vào object storage; URL public encode dấu cách và `#` |
 | POST   | `/api/v1/ai/merge_images`                                          | Staff | FE gửi `list_image_ids[]`. BE gọi AI với `list_url_images`. `background` `white`/`black` |
 | POST   | `/api/v1/ai/create_files_c`                                        | Staff | FE gửi `image_id`. BE gọi `AI_DOMAIN/api/v1/create_files_c` với `url_image` |
 | POST   | `/api/v1/ai/create_file_p`                                         | Staff | FE gửi `l_id`, `r_id`, `l_f_id`, `r_f_id`. BE gửi `url_l`, `url_r`, `url_l_f`, `url_r_f` |
@@ -606,7 +613,7 @@ FE: chọn name → các gauge là `needles_per_inch` phân biệt trong spec c�
 | POST   | `/api/v1/ai/auto_job`                                              | Staff | FE gửi `image_id`, `product_code`; `type_machine`, `number_jackquard` tùy chọn. BE gửi `url_image` |
 | POST   | `/api/v1/ai/combine_fc`                                            | Staff | FE gửi `ff_id`, `fb_id`. BE gửi `url_ff`, `url_fb`. `ff_has_hole`, `fb_has_hole` mặc định false |
 | POST   | `/api/v1/ai/shift_odd_rows`                                        | Staff | FE gửi `image_id`, `value`. BE gửi `url_image`, `value` |
-| POST   | `/api/v1/ai/create_kmo`                                            | Staff | FE gửi `image_id`. BE gửi `url_image`. `name_machine`, `gauge`, `width`, `rt`, `product_code`, `course_per_pixel`, `kmo_has_valve_chain` tùy chọn |
+| POST   | `/api/v1/ai/create_kmo`                                            | Staff | FE gửi `file_jc_id`, `file_f_id` (revision id). BE gửi `url_file_jc`, `url_file_f`. Kèm `product_code`, `barrenzahl`, `barrentyp`, `zul_max_kg`, `max_versatzsprung`, `max_ueberlegungssprung`, `kg_pattern`. `name_machine`, `gauge`, `width`, `rt`, `course_per_pixel`, `kmo_has_valve_chain` tùy chọn. File `.kmo` trong response được copy vào object storage và trả URL `BE_DOMAIN/media/...` |
 | GET    | `/api/v1/colors/`                                                  | User  | System + custom của user. Query `is_svg` / `is_pixel`: SVG (`is_svg=true`) tới BUILD_GRID; pixel (`is_pixel=true`) ở START_DESIGNING |
 | POST   | `/api/v1/colors/`                                                  | Staff | Tạo màu custom: `code`, `hex_value`, `is_svg`, `is_pixel` bắt buộc. SVG: `is_svg=true`, `is_pixel=false`. Pixel: ngược lại |
 | PATCH  | `/api/v1/colors/{id}/`                                             | Staff | Sửa màu custom (`code`, `hex_value`, `name`, `display_order`); id system → 400               |
@@ -630,7 +637,7 @@ Seed colors: `python manage.py seed_system_colors`.
 | `POST /work_items/{id}/source_documents/`          | Gộp vào `POST /work_items/` (process)                   |
 | `POST /source_documents/{id}/complete-processing/` | Gộp vào process pipeline                                |
 | JSON-only `POST /work_items/` (không file)         | Bắt buộc multipart + `files[]`                          |
-| `POST /parts/{id}/revert/`                         | **Không có** — dùng complete step + `clear_steps_after` |
+| `POST /parts/{id}/revert/`                         | **Không có** — complete lại step trước. Step sau về not started, dữ liệu giữ nguyên |
 
 
 ---
